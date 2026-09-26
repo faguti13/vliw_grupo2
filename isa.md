@@ -217,8 +217,6 @@ Mismo esquema de campo partido que el tipo Inmediato (offset de 15 bits, `imm[14
 |-------|------|------|------|------|------|------|
 | CP (LW — load word)  | imm[14] | rbase | imm[13:0] | rd | 0000 | 010 |
 | AP (SW — store word) | imm[14] | rbase | imm[13:0] | rd | 0001 | 010 |
-| CB (LB — load byte)  | ⚠️ **falta funct** | rbase | imm[13:0] | rd | ⚠️ **falta** | 010 |
-| AB (SB — store byte) | ⚠️ **falta funct** | rbase | imm[13:0] | rd | ⚠️ **falta** | 010 |
 
 > ⚠️ **Falta:** las filas de `CB` (load byte) y `AB` (store byte) están definidas como mnemónicos en la lista de instrucciones, pero **no tienen codificación (funct) asignada** en el material actual — solo `CP` y `AP` (word) tienen fila completa. Hay que asignarles su `funct` (por ejemplo `0010` y `0011`) para que el set quede completo.
 
