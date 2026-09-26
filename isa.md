@@ -66,7 +66,7 @@
 | 3 | **BRU** — Control de flujo | SIG, SNIG, SMI, SMQ (branches), S (jump) |
 | 4 | **Unidad Criptográfica (Feistel4)** | LOADKEY, FROUND — con acceso exclusivo a la bóveda de llaves |
 
-> ⚠️ **Falta — obligatorio (Sec. 4.1.2, BRU):** el enunciado exige definir y justificar la **estrategia frente a saltos** (branch delay slot(s) explícitos que debe llenar el generador de código, o vaciado de pipeline sin penalización oculta). Esto todavía no está decidido en el material actual.
+
 
 > ⚠️ **Falta:** ¿dónde encajan las instrucciones de tipo **Seguridad** (AUTH/LOGOUT) en esta tabla de unidades funcionales? (mismo punto señalado arriba).
 
@@ -164,9 +164,42 @@ Mismo esquema de campo partido que el tipo Inmediato (offset de 15 bits, `imm[14
 | SNIG (BNE)  | offset | rs1 | rs2 | 0001 | 011 |
 | SMI (BGE)   | offset | rs1 | rs2 | 0010 | 011 |
 | SMQ (BLT)   | offset | rs1 | rs2 | 0011 | 011 |
-| S (JMP)     | ⚠️ **falta codificación** | — | — | ⚠️ **falta** | 011 |
 
-> ⚠️ **Falta:** `S` (jump incondicional) aparece en la lista de instrucciones pero **no tiene fila en la tabla de codificación de Control**. Al ser incondicional probablemente no necesite `rs1`/`rs2`, pero hay que definir su formato de campo (¿usa todo el resto del slot para el offset/dirección destino?) y su `funct`.
+
+#### Salto incondicional S
+
+La instrucción `S` utiliza un formato diferente a los saltos condicionales,
+debido a que no requiere registros fuente.
+
+| Inst. | Offset `[31:7]` | funct `[6:3]` | opcode `[2:0]` |
+|-------|------------------|---------------|----------------|
+| S (JMP) | offset | 0100 | 011 |
+
+El campo `offset` es un valor con signo de 25 bits y representa una cantidad
+de bundles relativa al siguiente bundle.
+
+`PC_destino = PC + 16 + (SignExtend(offset) × 16)`
+#### Estrategia de saltos
+
+Las instrucciones de control utilizan direccionamiento relativo al Program
+Counter (PC). Debido a que cada bundle VLIW tiene un tamaño de 128 bits,
+equivalente a 16 bytes, el PC avanza 16 bytes por cada bundle.
+
+Para los saltos condicionales (`SIG`, `SNIG`, `SMI` y `SMQ`), el campo
+`offset` representa una cantidad de bundles relativa al siguiente bundle.
+
+La dirección destino se calcula como:
+
+`PC_destino = PC + 16 + (SignExtend(offset) × 16)`
+
+No se utilizarán branch delay slots visibles para el programador. Cuando un
+salto sea tomado, el PC se actualiza con la dirección destino y los bundles
+obtenidos por el flujo secuencial que ya no correspondan deberán ser
+descartados. La cantidad exacta de bundles a descartar dependerá de la
+organización del pipeline definida en la Entrega 2.
+
+Los saltos condicionales utilizan un offset con signo de 15 bits, mientras que
+el salto incondicional `S` utiliza un offset con signo de 25 bits.
 
 ### Tipo Criptografía — Feistel4 (opcode `100`)
 
@@ -206,7 +239,7 @@ Mismo esquema de campo partido que el tipo Inmediato (offset de 15 bits, `imm[14
 | Registro | `000` | SUM, REST, MUL, DIV, OLY, OLO, LOE, DLI, DLD, COMP |
 | Inmediato | `001` | SUMI, RESTI, MULI, DIVI, DLII, DLDI |
 | Memoria | `010` | CP, AP, CB ⚠️, AB ⚠️ |
-| Control | `011` | SIG, SNIG, SMI, SMQ, S ⚠️ |
+| Control | `011` | SIG, SNIG, SMI, SMQ, S |
 | Criptografía | `100` | LOADKEY, FROUND |
 | Seguridad | `101` | AUTH, LOGOUT, RDSR |
 | — (NOP por slot) | ⚠️ **falta** | — |
@@ -216,8 +249,8 @@ Mismo esquema de campo partido que el tipo Inmediato (offset de 15 bits, `imm[14
 ## Limitaciones del ISA (borrador)
 
 1. No hay soporte de punto flotante.
-2. El campo de inmediato/offset tiene 15 bits — valores fuera de ese rango requieren múltiples instrucciones (ej. cargar en dos partes).
-3. Slots fijos por unidad funcional: si un bundle no necesita, por ejemplo, ALU ese ciclo, ese slot debe llenarse con NOP (ver pendiente de codificación de NOP).
+2. Los inmediatos y los offsets de los saltos condicionales tienen 15 bits. El salto incondicional `S` dispone de un offset con signo de 25 bits.
+3. 3. Slots fijos por unidad funcional: si un bundle no necesita, por ejemplo, ALU ese ciclo, ese slot debe llenarse con NOP (ver pendiente de codificación de NOP).
 4. El hardware no resuelve riesgos de datos ni de control automáticamente (sin forwarding ni scoreboarding entre slots o bundles) — la calendarización estática es responsabilidad de quien genera el código (ensamblador propio o compilador de CE1108).
 5. ⚠️ **Falta completar esta sección** con las limitaciones reales una vez cerrados los pendientes (rango de direccionamiento, estrategia de saltos, etc.).
 
@@ -242,13 +275,13 @@ Checklist de todo lo señalado arriba, agrupado, para no perder nada antes de su
 - [ ] **Codificación de NOP por slot** (una por cada una de las 4 unidades funcionales) — Sec. 4.1.1, obligatorio.
 - [ ] **Diagrama del bundle completo de 128 bits** con los 4 slots y su unidad funcional asociada.
 - [ ] **Resolver dónde encajan las instrucciones de tipo Seguridad** (AUTH/LOGOUT) dentro del esquema de 4 slots/unidades funcionales.
-- [ ] **Estrategia frente a saltos** (branch delay slot(s) o vaciado de pipeline) — Sec. 4.1.2, obligatorio.
+- [x] **Estrategia frente a saltos** (branch delay slot(s) o vaciado de pipeline) — Sec. 4.1.2, obligatorio.
 - [ ] **Program Counter:** ancho y dirección/valor de reset — Sec. 4.5, obligatorio.
 - [x] **Registro de estado:** resuelto — 32 bits, registro aparte del banco de GPRs (`AUTH`, `VAULT_ERR`, `ERR_CODE`), solo escribible por `AUTH`/`LOGOUT`/lógica de error de la Unidad Cripto. Ver sección "Registro de Estado (SR)".
 - [x] **Mecanismo de excepción/error de acceso:** resuelto — bloqueo por hardware vía write-enable condicionado por `SR.AUTH` (no trap/interrupción); error observable vía `SR.VAULT_ERR`/`ERR_CODE` y nueva instrucción `RDSR` (tipo Seguridad) para que el software lo lea.
 - [ ] **Ancho de direccionamiento (32 bits)** y **tamaño mínimo de memoria (64 KB)** — confirmarlos explícitamente en el documento — Sec. 4.5, obligatorio.
 - [ ] **Codificación faltante de `CB` y `AB`** (load/store byte) en la tabla de tipo Memoria.
-- [ ] **Codificación faltante de `S`** (jump incondicional) en la tabla de tipo Control.
+- [x] **Codificación faltante de `S`** (jump incondicional) en la tabla de tipo Control.
 - [ ] (Recomendado) **Ejemplo de programa a nivel de bundle**, con NOPs incluidos.
 - [ ] (Recomendado) Aclarar si hay algún **registro reservado** (ej. registro cero) o los 32 son de uso libre.
 - [ ] Completar la sección de **Limitaciones del ISA** una vez cerrados los puntos anteriores.
