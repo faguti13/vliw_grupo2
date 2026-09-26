@@ -20,12 +20,12 @@
 | Ancho de registro | 32 bits |
 | Direccionamiento de memoria | Byte-addressable, alineado |
 | Endianness | Big-Endian |
-| Ancho de dirección | ⚠️ **[FALTA — ver Pendientes]** (enunciado exige 32 bits) |
-| Tamaño mínimo de memoria | ⚠️ **[FALTA — ver Pendientes]** (enunciado exige mínimo 64 KB) |
+| Ancho de dirección | 32 bits |
+| Tamaño mínimo de memoria | Mínimo 64 KB |
 | Punto flotante | No soportado |
 | Tipos de instrucción | 6 — nomenclatura **RIMCFS** (Registro, Inmediato, Memoria, Control, Feistel, Seguridad) |
 | Codificación general | Opcode 3 bits, funct 4 bits |
-| Program Counter | ⚠️ **[FALTA — ver Pendientes]** (ancho, valor de reset) |
+| Program Counter | 32 bits, valor de reset: `0x00000000`, avanza de  16 en 16 bytes (al siguiente bundle) |
 | Registro de estado (SR) | 32 bits, registro **aparte del banco de GPRs** (no es un GPR) — ver sección "Registro de Estado (SR)" |
 
 ---
@@ -77,9 +77,27 @@
 - 32 registros de propósito general de 32 bits, campo de registro de 5 bits.
 - **Justificación de 32 registros:** al ser una arquitectura VLIW, es el compilador (o el ensamblador) quien calendariza las instrucciones dentro de cada bundle. Contar con 32 registros evita dependencias falsas entre instrucciones, da margen para mantener variables vivas en registros, y facilita llenar los 4 slots de un bundle con instrucciones independientes — maximizando el paralelismo estático.
 
-> ⚠️ **Falta — obligatorio (Sec. 4.5):** ancho del PC y su valor de reset / dirección de inicio del programa. (El registro de estado ya se resolvió abajo.)
+### Program Counter (PC)
+
+El Program Counter (PC) es un registro especial de **32 bits** que contiene la dirección del bundle que se está ejecutando. Debido a que cada bundle VLIW tiene un tamaño de 128 bits, equivalente a 16 bytes, el PC avanza normalmente de 16 en 16 bytes.
+
+Por lo tanto, durante la ejecución secuencial:
+
+`PC_siguiente = PC + 16`
+
+El valor de reset del PC es `0x00000000`, por lo que la ejecución de un programa
+inicia en la dirección `0x00000000`.
+
+Las instrucciones de control pueden modificar el flujo normal del PC. En los
+saltos relativos, la dirección destino se calcula con respecto al siguiente
+bundle:
+
+`PC_destino = PC + 16 + (SignExtend(offset) × 16)`
+
+Como los bundles tienen 16 bytes y se almacenan alineados, las direcciones de inicio de bundles son múltiplos de 16.
 
 > ⚠️ **Falta (recomendado, no obligatorio):** convención de registros — ¿hay algún registro reservado (por ejemplo un registro cero, como suele hacerse en RISC), o los 32 son de uso completamente libre? Vale la pena dejarlo explícito para el ensamblador y para la contraparte de CE1108.
+
 
 ### Registro de Estado (SR) 
 
@@ -112,7 +130,34 @@ Si `SR.AUTH = 0`, esas señales son 0 sin importar qué instrucción venga codif
 **Instrucción de lectura — `RDSR`:** para que el compilador de CE1108 (o cualquier programa) pueda *enterarse* de que hubo un error de acceso y reaccionar (por ejemplo, reintentar `AUTH`, o abortar), se agrega una instrucción de lectura del SR hacia un GPR. Se añade al tipo **Seguridad**, junto a `AUTH`/`LOGOUT` — ver tabla de codificación abajo. Sin esta instrucción, `VAULT_ERR`/`ERR_CODE` solo serían visibles desde el testbench (mirando la señal interna), nunca desde un programa en ejecución.
 
 ---
+### Direccionamiento y Memoria
 
+La arquitectura utiliza direcciones de **32 bits** y memoria **byte-addressable**,
+lo que significa que cada dirección numérica identifica un byte individual. El espacio de
+direccionamiento teórico es de `2^32` bytes, equivalente a **4 GiB**.
+
+Sin embargo, la implementación planteada debe soportar como mínimo **64 KiB de memoria física**.
+Este tamaño mínimo no limita el formato de las direcciones del ISA, que permanece
+en 32 bits. La arquitectura utiliza representación **Big-Endian**. Por lo tanto, al almacenar
+una palabra de 32 bits, el byte más significativo se ubica en la dirección de
+memoria más baja.
+
+Para las instrucciones `load` y `store` se utiliza **direccionamiento base +
+desplazamiento (base + offset)**. La dirección efectiva se calcula como:
+
+`direccion_efectiva = GPR[rbase] + SignExtend(offset)`
+
+donde `rbase` es un registro de propósito general que contiene la dirección base
+y `offset` es el inmediato con signo de 15 bits codificado en la instrucción. `GPR[rbase]` es el contenido de un registro de propósito general ($rbase$) que guarda una dirección "punto de partida". 
+
+Este modo de direccionamiento permite acceder a posiciones cercanas a una
+dirección base utilizando una sola instrucción, sin requerir una operación
+aritmética adicional para calcular cada dirección.
+
+Los accesos de palabra (`CP` y `AP`) transfieren 32 bits (4 bytes) y deben
+realizarse sobre direcciones alineadas a 4 bytes.
+
+---
 ## Codificación por Tipo de Instrucción
 
 ### Tipo Registro (opcode `000`)
