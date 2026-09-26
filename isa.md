@@ -375,22 +375,3 @@ Se parte considerando que `r0 = 0` y los demás registros son de propósito gene
 | 1 | `SUMI r0, 20, r2` | `CP 0(r0), r4` | `NOP` | `NOP` |
 | 2 | `SUM r1, r2, r3` | `AP 4(r0), r3` | `NOP` | `NOP` |
 | 3 | `NOP` | `NOP` | `NOP` | `FROUND r3, r4, 0, 0, r5, r6` |
-
-## ⚠️ Pendientes para la Entrega 1 (resumen)
-
-Checklist de todo lo señalado arriba, agrupado, para no perder nada antes de subir a TEC Digital:
-
-- [x] **Codificación de NOP por slot** (una por cada una de las 4 unidades funcionales) — Sec. 4.1.1, obligatorio.
-- [x] **Diagrama del bundle completo de 128 bits:** resuelto — diagrama y tabla en "Distribución de bits del bundle" (4 slots, rangos de bits, unidad funcional, opcodes válidos y bytes en memoria).
-- [x] **Resolver dónde encajan las instrucciones de tipo Seguridad:** resuelto — AUTH/LOGOUT/RDSR comparten el slot 3 con Criptografía (Unidad Criptográfica y de Seguridad); el bundle se mantiene en 4 slots y 128 bits. Ver "Ubicación de las instrucciones de Seguridad".
-- [x] **Estrategia frente a saltos** (branch delay slot(s) o vaciado de pipeline) — Sec. 4.1.2, obligatorio.
-- [ ] **Program Counter:** ancho y dirección/valor de reset — Sec. 4.5, obligatorio.
-- [x] **Registro de estado:** resuelto — 32 bits, registro aparte del banco de GPRs (`AUTH`, `VAULT_ERR`, `ERR_CODE`), solo escribible por `AUTH`/`LOGOUT`/lógica de error de la Unidad Cripto. Ver sección "Registro de Estado (SR)".
-- [x] **Mecanismo de excepción/error de acceso:** resuelto — bloqueo por hardware vía write-enable condicionado por `SR.AUTH` (no trap/interrupción); error observable vía `SR.VAULT_ERR`/`ERR_CODE` y nueva instrucción `RDSR` (tipo Seguridad) para que el software lo lea.
-- [ ] **Ancho de direccionamiento (32 bits)** y **tamaño mínimo de memoria (64 KB)** — confirmarlos explícitamente en el documento — Sec. 4.5, obligatorio.
-- [ ] **Codificación faltante de `CB` y `AB`** (load/store byte) en la tabla de tipo Memoria.
-- [x] **Codificación faltante de `S`** (jump incondicional) en la tabla de tipo Control.
-- [x] (Recomendado) **Ejemplo de programa a nivel de bundle**, con NOPs incluidos.
-- [x] (Recomendado) Aclarar si hay algún **registro reservado** (ej. registro cero) o los 32 son de uso libre.
-- [ ] Completar la sección de **Limitaciones del ISA** una vez cerrados los puntos anteriores.
-- [x] Revisar que el documento **no incluya el pipeline/microarquitectura** (Sec. 4.1.3 nota): resuelto — el boceto de datapath no se incluye en este documento y se agregó la nota "Alcance del documento" al inicio. Las ecuaciones de write-enable de la sección del SR quedan marcadas como ilustrativas.
