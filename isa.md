@@ -43,7 +43,21 @@ La vista a nivel de bundle (diagrama de cómo se acomodan los 4 slots dentro de 
 - **Esquema de asignación:** se utilizan slots fijos, donde cada slot está atado permanentemente a un tipo de unidad funcional: 1 slot para ALU, 1 para LSU, 1 para BRU, 1 para la Unidad Criptográfica y de Seguridad (Feistel4 + AUTH/LOGOUT/RDSR).
 - **Justificación:** un esquema de slots fijos simplifica el datapath y su decodificación, ya que cada slot corresponde directamente a su unidad funcional. Además garantiza que el cómputo general (ALU/LSU/BRU) y el cómputo criptográfico puedan ejecutarse de forma independiente dentro del mismo bundle.
 
-> ⚠️ **Falta — obligatorio (Sec. 4.1.1):** **codificación de NOP por slot.** Actualmente solo existe el opcode/funct de cada instrucción real; no está definido qué patrón de bits en el slot de ALU, LSU, BRU o Cripto significa "este slot no ejecuta nada este ciclo". Debe definirse (por ejemplo, reservando un funct específico dentro de cada tipo, o un opcode reservado) y quedar documentado explícitamente, uno por cada uno de los 4 slots.
+### Codificación de NOP por slot
+Dado que el ISA utiliza bundles de 128 bits, divididos en 4 slots fijos de 32 bits cada uno, cada slot debe contener una codificación válida, incluso cuando la unidad funcional correspondiente no deba realizar ninguna operación.
+
+Para estos casos se define la instrucción NOP (No Operation). La codificación del NOP utiliza el valor `funct = 1111`. Este valor puede utilizarse en distintos slots, ya que cada slot está asociado a una unidad funcional específica, por lo que la posición del slot determina qué unidad funcional interpreta la instrucción.
+
+Cuando un slot contiene una instrucción NOP, la unidad funcional asociada no realiza ninguna operación y no modifica el estado de la arquitectura. De este modo, el NOP permite mantener la estructura fija de los bundles sin generar efectos sobre los registros, el modo de ejecución o la memoria.
+
+La codificación del NOP para cada slot se muestra en la siguiente tabla:
+
+| Slot | Unidad funcional | Opcode | Funct NOP |
+|------|------------------|--------|-----------|
+| 0    | ALU              | `000`  | `1111`    |
+| 1    | LSU              | `010`  | `1111`    |
+| 2    | BRU              | `011`  | `1111`    |
+| 3    | Cripto (Feistel4) | `100` | `1111`    |
 
 ### Distribución de bits del bundle
 
@@ -119,7 +133,13 @@ bundle:
 
 Como los bundles tienen 16 bytes y se almacenan alineados, las direcciones de inicio de bundles son múltiplos de 16.
 
-> ⚠️ **Falta (recomendado, no obligatorio):** convención de registros — ¿hay algún registro reservado (por ejemplo un registro cero, como suele hacerse en RISC), o los 32 son de uso completamente libre? Vale la pena dejarlo explícito para el ensamblador y para la contraparte de CE1108.
+### Registros Reservados
+El ISA cuenta con 32 registros de propósito general, de los cuales r0 siempre contendrá el valor 0, mientras que los registros r1 a r31 estarán destinados para el almacenamiento de datos y resultados. 
+
+Cualquier instrucción que utilice r0 como registro como destino no podrá guardar su resultado, ya que cualquier intento de modificarlo es descartado.
+
+Esta decisión permite contar con un registro que siempre tenga disponible el valor 0, sin tener la necesidad de utilizar otra instrucción para obtenerlo, lo cuál resulta útil para la realización de operaciones y simplificación de instrucciones.
+
 
 
 ### Registro de Estado (SR) 
@@ -306,7 +326,7 @@ el salto incondicional `S` utiliza un offset con signo de 25 bits.
 | Control | `011` | SIG, SNIG, SMI, SMQ, S |
 | Criptografía | `100` | LOADKEY, FROUND |
 | Seguridad | `101` | AUTH, LOGOUT, RDSR |
-| — (NOP por slot) | ⚠️ **falta** | — |
+| NOP por slot | Según slot | `NOP(funct = 1111)` |
 
 ---
 ## Limitaciones del ISA
@@ -345,21 +365,24 @@ el salto incondicional `S` utiliza un offset con signo de 25 bits.
 
 ## Ejemplo de Programa
 
-> ⚠️ **Falta por completo — recomendado, no estrictamente exigido pero refuerza mucho la entrega:** un ejemplo de programa **a nivel de bundle** (como el "Program 1" del sp4r7an de referencia), mostrando varios ciclos con los 4 slots codificados en cada uno — incluyendo slots en NOP cuando no se usan — y no solo instrucciones sueltas. Esto demuestra que el formato de bundle completo funciona en la práctica y sirve como referencia para el ensamblador propio y para la contraparte de CE1108.
+El programa busca ilustrar la utilización de los cuatro slots de un bundle. Cada fila representa un bundle de 128 bits, integrado por cuatro instrucciones de 32 bits.
 
-```
-Ciclo  Slot ALU        Slot LSU        Slot BRU        Slot Cripto      Comentario
-─────  ──────────────  ──────────────  ──────────────  ───────────────  ─────────────────────
-  0    [pendiente]     [pendiente]     [pendiente]     [pendiente]      [pendiente]
-```
+Se busca ejemplificar qué ocurre cuando una FU no necesita ejecutar una operación en un determinado bundle y cómo su slot se completa con una instrucción NOP. Además, se pretende mostrar cómo las instrucciones se agrupan previamente en bundles de 4 slots, donde cada instrucción se coloca en el slot correspondiente a su unidad funcional.
 
----
+Se parte considerando que `r0 = 0` y los demás registros son de propósito general.
+
+| Bundle | Slot ALU | Slot LSU | Slot BRU | Slot Cripto |
+|--------|----------|----------|----------|-------------|
+| 0 | `SUMI r0, 10, r1` | `NOP` | `NOP` | `NOP` |
+| 1 | `SUMI r0, 20, r2` | `CP 0(r0), r4` | `NOP` | `NOP` |
+| 2 | `SUM r1, r2, r3` | `AP 4(r0), r3` | `NOP` | `NOP` |
+| 3 | `NOP` | `NOP` | `NOP` | `FROUND r3, r4, 0, 0, r5, r6` |
 
 ## ⚠️ Pendientes para la Entrega 1 (resumen)
 
 Checklist de todo lo señalado arriba, agrupado, para no perder nada antes de subir a TEC Digital:
 
-- [ ] **Codificación de NOP por slot** (una por cada una de las 4 unidades funcionales) — Sec. 4.1.1, obligatorio.
+- [x] **Codificación de NOP por slot** (una por cada una de las 4 unidades funcionales) — Sec. 4.1.1, obligatorio.
 - [x] **Diagrama del bundle completo de 128 bits:** resuelto — diagrama y tabla en "Distribución de bits del bundle" (4 slots, rangos de bits, unidad funcional, opcodes válidos y bytes en memoria).
 - [x] **Resolver dónde encajan las instrucciones de tipo Seguridad:** resuelto — AUTH/LOGOUT/RDSR comparten el slot 3 con Criptografía (Unidad Criptográfica y de Seguridad); el bundle se mantiene en 4 slots y 128 bits. Ver "Ubicación de las instrucciones de Seguridad".
 - [x] **Estrategia frente a saltos** (branch delay slot(s) o vaciado de pipeline) — Sec. 4.1.2, obligatorio.
@@ -369,7 +392,7 @@ Checklist de todo lo señalado arriba, agrupado, para no perder nada antes de su
 - [ ] **Ancho de direccionamiento (32 bits)** y **tamaño mínimo de memoria (64 KB)** — confirmarlos explícitamente en el documento — Sec. 4.5, obligatorio.
 - [ ] **Codificación faltante de `CB` y `AB`** (load/store byte) en la tabla de tipo Memoria.
 - [x] **Codificación faltante de `S`** (jump incondicional) en la tabla de tipo Control.
-- [ ] (Recomendado) **Ejemplo de programa a nivel de bundle**, con NOPs incluidos.
-- [ ] (Recomendado) Aclarar si hay algún **registro reservado** (ej. registro cero) o los 32 son de uso libre.
+- [x] (Recomendado) **Ejemplo de programa a nivel de bundle**, con NOPs incluidos.
+- [x] (Recomendado) Aclarar si hay algún **registro reservado** (ej. registro cero) o los 32 son de uso libre.
 - [ ] Completar la sección de **Limitaciones del ISA** una vez cerrados los puntos anteriores.
 - [x] Revisar que el documento **no incluya el pipeline/microarquitectura** (Sec. 4.1.3 nota): resuelto — el boceto de datapath no se incluye en este documento y se agregó la nota "Alcance del documento" al inicio. Las ecuaciones de write-enable de la sección del SR quedan marcadas como ilustrativas.
