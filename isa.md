@@ -304,21 +304,44 @@ el salto incondicional `S` utiliza un offset con signo de 25 bits.
 |------|--------|----------------|
 | Registro | `000` | SUM, REST, MUL, DIV, OLY, OLO, LOE, DLI, DLD, COMP |
 | Inmediato | `001` | SUMI, RESTI, MULI, DIVI, DLII, DLDI |
-| Memoria | `010` | CP, AP, CB ⚠️, AB ⚠️ |
+| Memoria | `010` | CP, AP |
 | Control | `011` | SIG, SNIG, SMI, SMQ, S |
 | Criptografía | `100` | LOADKEY, FROUND |
 | Seguridad | `101` | AUTH, LOGOUT, RDSR |
 | — (NOP por slot) | ⚠️ **falta** | — |
 
 ---
+## Limitaciones del ISA
 
-## Limitaciones del ISA (borrador)
+1. **Sin punto flotante:** el ISA opera únicamente con datos enteros de 32 bits;
+   no incluye instrucciones ni registros de punto flotante.
 
-1. No hay soporte de punto flotante.
-2. Los inmediatos y los offsets de los saltos condicionales tienen 15 bits. El salto incondicional `S` dispone de un offset con signo de 25 bits.
-3. 3. Slots fijos por unidad funcional: si un bundle no necesita, por ejemplo, ALU ese ciclo, ese slot debe llenarse con NOP (ver pendiente de codificación de NOP).
-4. El hardware no resuelve riesgos de datos ni de control automáticamente (sin forwarding ni scoreboarding entre slots o bundles) — la calendarización estática es responsabilidad de quien genera el código (ensamblador propio o compilador de CE1108).
-5. ⚠️ **Falta completar esta sección** con las limitaciones reales una vez cerrados los pendientes (rango de direccionamiento, estrategia de saltos, etc.).
+2. **Rango limitado de inmediatos:** las instrucciones de tipo inmediato utilizan
+   inmediatos con signo de 15 bits.
+
+3. **Rango limitado de saltos:** los saltos condicionales utilizan un offset con
+   signo de 15 bits y el salto incondicional `S` utiliza un offset con signo de
+   25 bits. Estos offsets representan cantidades de bundles y no bytes.
+
+4. **Calendarización estática:** el hardware no implementa detección ni resolución
+   dinámica de dependencias de datos mediante forwarding, scoreboarding o stalls
+   por dependencias. El generador de código debe organizar los bundles respetando
+   las dependencias e insertar NOPs cuando sea necesario.
+
+5. **Alineamiento de memoria:** los accesos de palabra de 32 bits (`CP` y `AP`)
+   requieren direcciones múltiplo de 4. Los accesos de byte (`CB` y `AB`) no
+   presentan esta restricción.
+
+6. **Memoria física mínima:** aunque el ISA utiliza direcciones de 32 bits y puede
+   representar un espacio de direccionamiento teórico de 4 GiB, la implementación
+   únicamente garantiza como requisito mínimo 64 KiB de memoria física.
+
+7. **Acceso restringido a la bóveda:** las llaves almacenadas en la bóveda no
+   pueden transferirse hacia registros de propósito general ni hacia la memoria
+   general. Su utilización está restringida a las operaciones autorizadas
+   definidas por el ISA.
+
+
 
 ---
 
