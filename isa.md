@@ -152,7 +152,6 @@ Si `SR.AUTH = 0`, esas señales son 0 sin importar qué instrucción venga codif
 
 **Instrucción de lectura — `RDSR`:** para que el compilador de CE1108 (o cualquier programa) pueda *enterarse* de que hubo un error de acceso y reaccionar (por ejemplo, reintentar `AUTH`, o abortar), se agrega una instrucción de lectura del SR hacia un GPR. Se añade al tipo **Seguridad**, junto a `AUTH`/`LOGOUT` — ver tabla de codificación abajo. Sin esta instrucción, `VAULT_ERR`/`ERR_CODE` solo serían visibles desde el testbench (mirando la señal interna), nunca desde un programa en ejecución.
 
----
 ### Direccionamiento y Memoria
 
 La arquitectura utiliza direcciones de **32 bits** y memoria **byte-addressable**,
@@ -180,7 +179,6 @@ aritmética adicional para calcular cada dirección.
 Los accesos de palabra (`CP` y `AP`) transfieren 32 bits (4 bytes) y deben
 realizarse sobre direcciones alineadas a 4 bytes.
 
----
 ## Codificación por Tipo de Instrucción
 
 ### Tipo Registro (opcode `000`)
