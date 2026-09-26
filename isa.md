@@ -4,10 +4,6 @@
 **Grupo:** 2
 **Entrega 1 — Especificación del ISA**
 
-> ⚠️ **Nota general antes de entregar:** este documento se armó a partir de lo avanzado hasta ahora. Al final hay una sección **"Pendientes para Entrega 1"** con todo lo que el enunciado (Sec. 4.5, 4.1.1, 4.1.2 y el rubro 8.1) exige y que aún no está resuelto en el material actual. Revísenla y complétenla antes de subir el documento — son puntos que si faltan, se pierden directamente en la rúbrica de la Entrega 1 (20%).
-
----
-
 ## Resumen
 
 | Parámetro | Valor |
@@ -15,7 +11,7 @@
 | Filosofía | RISC, registro-registro |
 | Ancho de bundle | 128 bits |
 | Slots por bundle | 4 (32 bits cada uno) |
-| Asignación de slots | Fija: 1× ALU, 1× LSU, 1× BRU, 1× Unidad Criptográfica (Feistel4) |
+| Asignación de slots | Fija: 1× ALU, 1× LSU, 1× BRU, 1× Unidad Criptográfica y Seguridad (Feistel4 + AUTH/LOGOUT/RDSR) |
 | Registros de propósito general | 32 (5 bits por campo de registro) |
 | Ancho de registro | 32 bits |
 | Direccionamiento de memoria | Byte-addressable, alineado |
@@ -28,8 +24,6 @@
 | Program Counter | 32 bits, valor de reset: `0x00000000`, avanza de  16 en 16 bytes (al siguiente bundle) |
 | Registro de estado (SR) | 32 bits, registro **aparte del banco de GPRs** (no es un GPR) — ver sección "Registro de Estado (SR)" |
 
----
-
 ## Formato de instrucción (dentro de cada slot)
 
 ```
@@ -37,25 +31,58 @@
 [                     campos según tipo de instrucción                    ] [ funct ] [opcode]
 ```
 
-- **Opcode** (bits `[2:0]`): identifica el *tipo* de instrucción (Registro, Inmediato, Memoria, Control, Cripto, Seguridad).
+- **Opcode** (bits `[2:0]`): identifica el tipo de instrucción (Registro, Inmediato, Memoria, Control, Cripto, Seguridad).
 - **Funct** (bits `[6:3]`): dentro de cada tipo, selecciona la operación específica (SUM, REST, MUL, …).
 - Los campos restantes (`rs1`, `rs2`, `rd`, inmediatos, offsets) varían según el tipo — ver tablas abajo.
 
-> ⚠️ **Falta:** diagrama del **bundle completo de 128 bits** mostrando los 4 slots de 32 bits uno al lado del otro y qué unidad funcional ocupa cada uno. Hoy solo está documentada la codificación *dentro* de un slot de 32 bits, tipo por tipo — falta la vista a nivel de bundle que exige la Sec. 4.1.1.
-
----
+La vista a nivel de bundle (diagrama de cómo se acomodan los 4 slots dentro de los 128 bits) está en la sección **"Formato de Bundle y Slots"** → "Distribución de bits del bundle".
 
 ## Formato de Bundle y Slots
 
-- **Ancho del bundle:** 128 bits, dividido en **4 slots de 32 bits**.
-- **Esquema de asignación:** slots **fijos** — cada slot está atado permanentemente a un tipo de unidad funcional: 1 slot para ALU, 1 para LSU, 1 para BRU, 1 para la Unidad Criptográfica (Feistel4).
-- **Justificación:** un esquema de slots fijos simplifica el datapath y su decodificación, ya que cada slot corresponde directamente a su unidad funcional (no requiere un campo de selección adicional). Además garantiza que el cómputo general (ALU/LSU/BRU) y el cómputo criptográfico puedan coexistir de forma independiente en el mismo bundle, sin competir por el mismo slot.
+- **Ancho del bundle:** 128 bits, dividido en 4 slots de 32 bits.
+- **Esquema de asignación:** se utilizan slots fijos, donde cada slot está atado permanentemente a un tipo de unidad funcional: 1 slot para ALU, 1 para LSU, 1 para BRU, 1 para la Unidad Criptográfica y de Seguridad (Feistel4 + AUTH/LOGOUT/RDSR).
+- **Justificación:** un esquema de slots fijos simplifica el datapath y su decodificación, ya que cada slot corresponde directamente a su unidad funcional. Además garantiza que el cómputo general (ALU/LSU/BRU) y el cómputo criptográfico puedan ejecutarse de forma independiente dentro del mismo bundle.
 
 > ⚠️ **Falta — obligatorio (Sec. 4.1.1):** **codificación de NOP por slot.** Actualmente solo existe el opcode/funct de cada instrucción real; no está definido qué patrón de bits en el slot de ALU, LSU, BRU o Cripto significa "este slot no ejecuta nada este ciclo". Debe definirse (por ejemplo, reservando un funct específico dentro de cada tipo, o un opcode reservado) y quedar documentado explícitamente, uno por cada uno de los 4 slots.
 
-> ⚠️ **Falta — ambigüedad a resolver:** el ISA define **6 tipos de instrucción** (RIMCFS) pero el bundle solo tiene **4 slots/unidades funcionales** (ALU, LSU, BRU, Cripto). Las instrucciones de tipo **Seguridad** (AUTH, LOGOUT, opcode `101`) no tienen unidad funcional ni slot asignado explícitamente — ¿comparten el slot de la Unidad Criptográfica (por estar ligadas a la bóveda de llaves) o necesitan su propio slot? Esto debe decidirse y justificarse, porque afecta directamente si el bundle sigue teniendo 4 slots o necesita un quinto.
+### Distribución de bits del bundle
 
----
+```
+ 127            96 95             64 63             32 31              0
+┌─────────────────┬─────────────────┬─────────────────┬─────────────────┐
+│      Slot 0     │      Slot 1     │      Slot 2     │      Slot 3     │
+│       ALU       │       LSU       │       BRU       │ Cripto/Seguridad│
+│  opcode 000/001 │    opcode 010   │    opcode 011   │  opcode 100/101 │
+│   PC+0 .. PC+3  │   PC+4 .. PC+7  │  PC+8 .. PC+11  │  PC+12 .. PC+15 │
+└─────────────────┴─────────────────┴─────────────────┴─────────────────┘
+```
+
+| Slot | Bits del bundle | Bytes en memoria | Unidad funcional | Opcodes válidos en el slot |
+|---|---|---|---|---|
+| 0 | `[127:96]` | `PC+0` … `PC+3` | ALU | `000` (Registro), `001` (Inmediato) |
+| 1 | `[95:64]` | `PC+4` … `PC+7` | LSU | `010` (Memoria) |
+| 2 | `[63:32]` | `PC+8` … `PC+11` | BRU | `011` (Control) |
+| 3 | `[31:0]` | `PC+12` … `PC+15` | Unidad Criptográfica y de Seguridad | `100` (Criptografía), `101` (Seguridad) |
+
+- **Orden de los slots:** como la memoria es Big-Endian, el slot 0 ocupa los bits más significativos del bundle y es el primero en memoria. El bit 31 del slot 0 corresponde al bit 127 del bundle, y el bit 0 del slot 3 al bit 0 del bundle.
+- **Tamaño y alineación:** cada bundle ocupa 16 bytes consecutivos y empieza en una dirección múltiplo de 16. Esto es consistente con el avance del PC de 16 bytes por bundle usado en la estrategia de saltos.
+- **Codificación dentro del slot:** los 32 bits de cada slot siguen exactamente las tablas de "Codificación por Tipo de Instrucción".
+- **Opcodes fuera de su slot:** una instrucción con un opcode que no corresponde a su slot (por ejemplo, un `011` en el slot de la ALU) es una codificación inválida y el ensamblador debe rechazarla.
+- **Emisión:** las cuatro instrucciones de un bundle se emiten juntas. Las dependencias entre ellas las resuelve el compilador.
+
+### Ubicación de las instrucciones de Seguridad (AUTH, LOGOUT, RDSR)
+
+**Decisión de Diseño:** las instrucciones de tipo Seguridad comparten el slot 3 con las instrucciones de Criptografía. La unidad de ese slot pasa a llamarse Unidad Criptográfica y de Seguridad, y distingue qué ejecutar por el opcode: `100` para Criptografía (`LOADKEY`, `FROUND`) y `101` para Seguridad (`AUTH`, `LOGOUT`, `RDSR`).
+
+**Justificación:**
+
+1. **Controlan el mismo recurso.** Las instrucciones de Seguridad existen solo para habilitar o consultar el acceso a la bóveda de llaves, y el registro de estado ya se define como modificado únicamente por `AUTH`, `LOGOUT` y la lógica de error de la Unidad Criptográfica. Ponerlas en el mismo slot deja en una sola unidad funcional todo lo que toca la bóveda y el bit `SR.AUTH`.
+2. **Respeta el formato fijo del bundle.** El bundle es de 128 bits con 4 slots de 32 bits y no se amplía. Con 6 tipos de instrucción y 4 slots, algunos slots deben atender más de un tipo: así como el slot de la ALU atiende los tipos Registro e Inmediato, el slot 3 atiende Criptografía y Seguridad. Esto es consistente con el enunciado (Sec. 4.5), que agrupa en una sola categoría las instrucciones de la Unidad Criptográfica Feistel4 y de manejo de la bóveda de llaves, por lo que cada bundle puede seguir combinando libremente instrucciones de ALU, memoria, control y criptografía/bóveda.
+3. **Evita ambigüedad dentro de un bundle.** Como una instrucción de Seguridad y una de Criptografía no pueden ir en el mismo bundle, no existe el caso de un `AUTH` y un `FROUND` emitidos juntos donde haya que definir cuál ve primero el bit de autenticación.
+
+**Alternativa descartada:** se consideró asignar a las instrucciones de Seguridad un slot propio, pero se descartó porque obligaría a ampliar el bundle a 5 slots (160 bits), y el formato del bundle está fijo en 128 bits con 4 slots.
+
+**Consecuencia de compartir el slot:** una instrucción de Seguridad y una de Criptografía no pueden ir en el mismo bundle, por lo que quien genera el código debe colocarlas en bundles distintos. Como `AUTH`, `LOGOUT` y `RDSR` son poco frecuentes frente a `FROUND`, el impacto en rendimiento es despreciable.
 
 ## Unidades Funcionales
 
@@ -64,13 +91,9 @@
 | 1 | **ALU** — Aritmético-lógica | SUM, REST, MUL, DIV, OLY, OLO, LOE, DLI, DLD, COMP, y sus variantes inmediatas (SUMI, RESTI, MULI, DIVI, DLII, DLDI) |
 | 2 | **LSU** — Carga/almacenamiento | CB, CP (load byte/word), AB, AP (store byte/word) |
 | 3 | **BRU** — Control de flujo | SIG, SNIG, SMI, SMQ (branches), S (jump) |
-| 4 | **Unidad Criptográfica (Feistel4)** | LOADKEY, FROUND — con acceso exclusivo a la bóveda de llaves |
+| 4 | **Unidad Criptográfica y de Seguridad** | LOADKEY, FROUND (Criptografía, opcode `100`) y AUTH, LOGOUT, RDSR (Seguridad, opcode `101`) — única unidad con acceso a la bóveda de llaves y al bit de autenticación del SR |
 
-
-
-> ⚠️ **Falta:** ¿dónde encajan las instrucciones de tipo **Seguridad** (AUTH/LOGOUT) en esta tabla de unidades funcionales? (mismo punto señalado arriba).
-
----
+Las instrucciones de Seguridad comparten el slot de la Unidad Criptográfica; la decisión y su justificación están en "Formato de Bundle y Slots" → "Ubicación de las instrucciones de Seguridad".
 
 ## Banco de Registros, PC y Registro de Estado
 
@@ -318,8 +341,8 @@ Ciclo  Slot ALU        Slot LSU        Slot BRU        Slot Cripto      Comentar
 Checklist de todo lo señalado arriba, agrupado, para no perder nada antes de subir a TEC Digital:
 
 - [ ] **Codificación de NOP por slot** (una por cada una de las 4 unidades funcionales) — Sec. 4.1.1, obligatorio.
-- [ ] **Diagrama del bundle completo de 128 bits** con los 4 slots y su unidad funcional asociada.
-- [ ] **Resolver dónde encajan las instrucciones de tipo Seguridad** (AUTH/LOGOUT) dentro del esquema de 4 slots/unidades funcionales.
+- [x] **Diagrama del bundle completo de 128 bits:** resuelto — diagrama y tabla en "Distribución de bits del bundle" (4 slots, rangos de bits, unidad funcional, opcodes válidos y bytes en memoria).
+- [x] **Resolver dónde encajan las instrucciones de tipo Seguridad:** resuelto — AUTH/LOGOUT/RDSR comparten el slot 3 con Criptografía (Unidad Criptográfica y de Seguridad); el bundle se mantiene en 4 slots y 128 bits. Ver "Ubicación de las instrucciones de Seguridad".
 - [x] **Estrategia frente a saltos** (branch delay slot(s) o vaciado de pipeline) — Sec. 4.1.2, obligatorio.
 - [ ] **Program Counter:** ancho y dirección/valor de reset — Sec. 4.5, obligatorio.
 - [x] **Registro de estado:** resuelto — 32 bits, registro aparte del banco de GPRs (`AUTH`, `VAULT_ERR`, `ERR_CODE`), solo escribible por `AUTH`/`LOGOUT`/lógica de error de la Unidad Cripto. Ver sección "Registro de Estado (SR)".
@@ -330,4 +353,4 @@ Checklist de todo lo señalado arriba, agrupado, para no perder nada antes de su
 - [ ] (Recomendado) **Ejemplo de programa a nivel de bundle**, con NOPs incluidos.
 - [ ] (Recomendado) Aclarar si hay algún **registro reservado** (ej. registro cero) o los 32 son de uso libre.
 - [ ] Completar la sección de **Limitaciones del ISA** una vez cerrados los puntos anteriores.
-- [ ] Revisar que el documento **no incluya el pipeline/microarquitectura** (Sec. 4.1.3 nota) — eso se evalúa en la Entrega 2, no aquí. El boceto de datapath IF/ID/EX/MEM/WB puede quedar fuera de este documento o marcarse claramente como "avance preliminar, no parte del contrato congelado".
+- [x] Revisar que el documento **no incluya el pipeline/microarquitectura** (Sec. 4.1.3 nota): resuelto — el boceto de datapath no se incluye en este documento y se agregó la nota "Alcance del documento" al inicio. Las ecuaciones de write-enable de la sección del SR quedan marcadas como ilustrativas.
