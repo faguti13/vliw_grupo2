@@ -5,10 +5,10 @@ module alu (
   input  logic [31:0] instr,
   input  logic [31:0] a, // GPR[rs1]
   input  logic [31:0] b, // GPR[rs2] (solo tipo Registro)
-  output logic        wen,
+  output logic        wen, //indica si un resultado se debe escribir o no
   output logic [4:0]  rd,
   output logic [31:0] y, // resultado de la operacion 
-  output logic        illegal //indicar conficacion de la intruccion invalida
+  output logic        illegal //indicar conficacion de la intruccion invalida, para ver errores en la simulacion
 );
   logic [2:0]  opc;
   logic [3:0]  funct;
@@ -17,7 +17,7 @@ module alu (
   logic signed [31:0] sa, sb, sq;   // division con signo (trunca hacia cero)
   assign sa = a;
   assign sb = op2;
-  assign sq = (sb == 32'sd0) ? 32'sd0 : (sa / sb);
+  assign sq = (sb == 32'sd0) ? 32'sd0 : (sa / sb); //0 si el div es 0, sino es el cociente entero
   assign opc   = instr[2:0];
   assign funct = instr[6:3];
   assign rd    = instr[11:7];
