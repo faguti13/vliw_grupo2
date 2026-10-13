@@ -1,4 +1,5 @@
 // tb_regfile.sv - Banco de registros: r0 fijo, escrituras por puerto y prioridad.
+
 module tb_regfile;
   logic clk = 0, rst = 1; logic [39:0] raddr; logic [255:0] rdata;
   logic [4:0] wen; logic [24:0] waddr; logic [159:0] wdata;
