@@ -1,0 +1,13 @@
+# lazo con ALU+LSU+BRU+cripto en los mismos bundles: cifra 3 bloques en el lugar
+r13 = 3
+r15 = 12
+mem 0x10000 = 0x2918cb13
+mem 0x10004 = 0x94aaf892
+mem 0x10008 = 0x2b6fb0f2
+mem 0x1000c = 0xd11fefcc
+mem 0x10010 = 0xdee9d742
+mem 0x10014 = 0xfe5b007
+forbid 0x112233
+forbid 0x44556677
+forbid 0x8899aabb
+forbid 0xccddeeff
