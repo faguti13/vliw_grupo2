@@ -1,0 +1,25 @@
+# veneno: ningun bundle descartado se ejecuta
+r10 = 0
+r11 = 0
+r14 = 0
+r15 = 0
+r18 = 0
+r19 = 0
+r22 = 0
+r23 = 0
+r26 = 0
+r27 = 0
+r9 = 0
+# no tomados: los dos bundles siguientes si se ejecutan
+r12 = 1
+r13 = 2
+r16 = 1
+r17 = 2
+r20 = 1
+r21 = 2
+r24 = 1
+r25 = 2
+# lazo hacia atras
+r5 = 4
+# llamadas: r1 = 3 + 10 + 10
+r7 = 23
