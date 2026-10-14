@@ -12,7 +12,7 @@ para este procesador.
 |---|---|
 | `rtl/` | SystemVerilog: pipeline IF/ID/EX/WB, banco de registros, ALU, LSU, BRU, bóveda de llaves, unidad Feistel |
 | `tb/` | Testbenches autoverificables por módulo y `tb_top` (procesador completo); `tb/waves/` guarda de GTKWave |
-| `tools/` | `vliwasm.py` (ensamblador), `bin2mem.py`, `load_file.py`, `extract_data.py`, `check_dump.py`, `feistel4_ref.c` (referencia en C), `demo.sh` |
+| `tools/` | `vliwasm.py` (ensamblador), `bin2mem.py`, `load_file.py`, `extract_data.py`, `check_dump.py`, `feistel4_ref.c` (referencia en C), `demo.sh`, `crypto_file.sh` (cifra o descifra cualquier archivo en el RTL; lo usan `make enc`/`dec`/`crypto`), `gen_programs.py` (genera los programas con constantes de 32 bits y sus `.expect`), `traza.py` (anota la traza `+TRACE` con las etiquetas del `.lst`) |
 | `programs/` | Programas en ensamblador con su `.expect` (resultado esperado) |
 | `docs/` | `isa.md`, `microarchitecture.md`, `simulation.md`, `compiler-integration.md`, `evidencias/` |
 
