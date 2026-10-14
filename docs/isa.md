@@ -103,8 +103,8 @@ La codificación del NOP para cada slot se muestra en la siguiente tabla:
 | # | Unidad | Instrucciones que atiende |
 |---|--------|---------------------------|
 | 1 | **ALU** — Aritmético-lógica | SUM, REST, MUL, DIV, OLY, OLO, LOE, DLI, DLD, COMP, y sus variantes inmediatas (SUMI, RESTI, MULI, DIVI, DLII, DLDI) |
-| 2 | **LSU** — Carga/almacenamiento | CB, CP (load byte/word), AB, AP (store byte/word) |
-| 3 | **BRU** — Control de flujo | SIG, SNIG, SMI, SMQ (branches), S (jump) |
+| 2 | **LSU** — Carga/almacenamiento | CP (load word), AP (store word) |
+| 3 | **BRU** — Control de flujo | SIG, SNIG, SMI, SMQ (branches), S (jump), SYE (call), SRG (ret), FIN (halt) |
 | 4 | **Unidad Criptográfica y de Seguridad** | LOADKEY, FROUND (Criptografía, opcode `100`) y AUTH, LOGOUT, RDSR (Seguridad, opcode `101`) — única unidad con acceso a la bóveda de llaves y al bit de autenticación del SR |
 
 Las instrucciones de Seguridad comparten el slot de la Unidad Criptográfica; la decisión y su justificación están en "Formato de Bundle y Slots" → "Ubicación de las instrucciones de Seguridad".
@@ -300,11 +300,11 @@ el salto incondicional `S` utiliza un offset con signo de 25 bits.
 
 ### Tipo Seguridad (opcode `101`)
 
-| Inst. | opt `[31:12]` | rd `[11:7]` | funct `[6:3]` | opcode `[2:0]` |
+| Inst. | opt `[31:12]` (20 bits) | rd `[11:7]` | funct `[6:3]` | opcode `[2:0]` |
 |-------|---|------|------|------|
-| AUTH   | 0000000000000000000 | rs_cred | 0000 | 101 |
-| LOGOUT | 0000000000000000000 | 00000 | 0001 | 101 |
-| RDSR   | 0000000000000000000 | rd | 0010 | 101 |
+| AUTH   | 00000000000000000000 | rs_cred | 0000 | 101 |
+| LOGOUT | 00000000000000000000 | 00000 | 0001 | 101 |
+| RDSR   | 00000000000000000000 | rd | 0010 | 101 |
 
 - `AUTH rs_cred`: compara `rs_cred` contra la credencial esperada; si coincide, activa el bit de autenticado en el registro de estado (`SR.AUTH ← 1`, y limpia `VAULT_ERR`/`ERR_CODE`).
 - `LOGOUT`: sin operandos; desactiva el bit de autenticado (`SR.AUTH ← 0`).
@@ -321,7 +321,7 @@ el salto incondicional `S` utiliza un offset con signo de 25 bits.
 | Registro | `000` | SUM, REST, MUL, DIV, OLY, OLO, LOE, DLI, DLD, COMP |
 | Inmediato | `001` | SUMI, RESTI, MULI, DIVI, DLII, DLDI |
 | Memoria | `010` | CP, AP |
-| Control | `011` | SIG, SNIG, SMI, SMQ, S |
+| Control | `011` | SIG, SNIG, SMI, SMQ, S, SYE, SRG, FIN |
 | Criptografía | `100` | LOADKEY, FROUND |
 | Seguridad | `101` | AUTH, LOGOUT, RDSR |
 | NOP por slot | Según slot | `NOP(funct = 1111)` |
@@ -345,8 +345,7 @@ el salto incondicional `S` utiliza un offset con signo de 25 bits.
    las dependencias e insertar NOPs cuando sea necesario.
 
 5. **Alineamiento de memoria:** los accesos de palabra de 32 bits (`CP` y `AP`)
-   requieren direcciones múltiplo de 4. Los accesos de byte (`CB` y `AB`) no
-   presentan esta restricción.
+   requieren direcciones múltiplo de 4. No existen accesos de byte (v1.1).
 
 6. **Memoria física mínima:** aunque el ISA utiliza direcciones de 32 bits y puede
    representar un espacio de direccionamiento teórico de 4 GiB, la implementación
@@ -375,3 +374,130 @@ Se parte considerando que `r0 = 0` y los demás registros son de propósito gene
 | 1 | `SUMI r0, 20, r2` | `CP 0(r0), r4` | `NOP` | `NOP` |
 | 2 | `SUM r1, r2, r3` | `AP 4(r0), r3` | `NOP` | `NOP` |
 | 3 | `NOP` | `NOP` | `NOP` | `FROUND r3, r4, 0, 0, r5, r6` |
+---
+
+## Adenda v1.1 (posterior a la Entrega 1)
+
+Registro de cambios. Cada cambio se comunica formalmente al grupo de CE1108
+(ver `compiler-integration.md`) porque afecta al generador de código.
+
+### Resumen de cambios
+
+| # | Cambio | Justificación |
+|---|--------|---------------|
+| 1 | Nuevas instrucciones de control `SYE` (CALL), `SRG` (RET), `FIN` (HALT) | Sin salto a registro no se puede retornar de una función llamada desde varios sitios y JAF tiene recursión. CE1108 exige CALL/RET/HALT y `terminar` necesita HALT. |
+| 2 | `COMP` definido como "menor que con signo" | La Entrega 1 no definía el resultado de `COMP`. |
+| 3 | Se eliminan `CB`/`AB` | Nunca tuvieron codificación; la LSU queda solo con `CP`/`AP`. |
+| 4 | Semántica aritmética, latencias, NOP canónicos, fe de erratas | Contrato exacto para el compilador. |
+| 5 | Credencial de `AUTH` y código de error `010` | Cierra el comportamiento de un `AUTH` fallido. |
+
+### Nuevas instrucciones del tipo Control (opcode `011`)
+
+| Inst. | Campos | funct | Efecto |
+|---|---|---|---|
+| `SYE etiqueta` | offset `[31:7]` (25 bits, igual que `S`) | `0101` | `r31 <- PC+16`; `PC <- PC + 16 + SE(offset)*16` |
+| `SRG rs1` | `[31:17]=0`, rs1 `[16:12]`, `[11:7]=0` | `0110` | `PC <- GPR[rs1]` (la dirección debe ser múltiplo de 16) |
+| `FIN` | `[31:7]=0` | `0111` | detiene el fetch, el pipeline se vacía y se activa `halted` |
+
+Palabra de `FIN`: `0x0000003B`.
+
+### Semántica aritmética
+
+- `COMP rs1, rs2, rd`: `rd <- (rs1 <s rs2) ? 1 : 0` (comparación con signo).
+- `MUL` guarda los 32 bits bajos. `DIV` es con signo y trunca hacia cero; dividir entre 0 da `0xFFFFFFFF`.
+- La aritmética da la vuelta (wrap-around) en 32 bits.
+- Los desplazamientos usan solo los bits `[4:0]` del segundo operando (o del inmediato); `DLD`/`DLDI` son lógicos.
+- El inmediato de 15 bits se extiende con signo, excepto en `DLII`/`DLDI`, donde se usan los 5 bits bajos.
+- `SIG`/`SNIG`/`SMI`/`SMQ` comparan con signo.
+- Los campos `opt` deben ser 0. Una codificación inválida se comporta como NOP y levanta una bandera de simulación.
+- En `CP`/`AP` los bits `[1:0]` de la dirección se ignoran (alineación a palabra).
+
+### Credencial de AUTH
+
+La credencial esperada es el parámetro de hardware `CRED_BOVEDA` (por defecto `0xCAFE1234`); el software no puede leerlo. Un `AUTH` fallido hace `SR.AUTH <- 0` y `ERR_CODE <- 010` (con `VAULT_ERR <- 1`).
+
+### Semántica del bundle
+
+- Los 4 slots leen sus operandos a la vez, en la etapa ID.
+- Dos escrituras al mismo GPR dentro de un bundle hacen el programa inválido: el ensamblador lo rechaza y el hardware aplica prioridad fija (slot 3 > 2 > 1 > 0).
+- En `FROUND`, `rd_L` debe ser distinto de `rd_R`.
+- `AP` escribe memoria con el valor de `GPR[rd]` (el campo `rd` del tipo Memoria es el registro fuente).
+
+### Latencias visibles al programador (contrato para el planificador)
+
+Sea `i` el índice de un bundle.
+
+- Un GPR escrito por el bundle `i` se puede leer desde el bundle `i+3`.
+- Un `AP` en el bundle `i` es visible para un `CP` desde el bundle `i+1`.
+- Los cambios al SR y a la bóveda los ve la instrucción de slot 3 del bundle `i+1`.
+- Un salto tomado (`SIG`, `SNIG`, `SMI`, `SMQ`, `S`, `SYE`, `SRG`) descarta los 2 bundles siguientes. El primer bundle del destino ya ve el `r31` escrito por `SYE`.
+- `FIN` detiene la ejecución; los bundles posteriores no tienen efecto.
+
+### NOP canónicos por slot
+
+| Slot | Palabra |
+|---|---|
+| 0 (ALU) | `0x00000078` |
+| 1 (LSU) | `0x0000007A` |
+| 2 (BRU) | `0x0000007B` |
+| 3 (Cripto/Seguridad) | `0x0000007C` |
+
+### Fe de erratas
+
+- En el tipo Seguridad el campo `opt [31:12]` mide 20 bits.
+- En `LOADKEY` el registro fuente va en `[11:7]`, `key_idx` en `[18:17]` y `subkey_idx` en `[20:19]`.
+
+### Sintaxis del ensamblador
+
+- Cada línea es un bundle; los slots se separan con `|`. Cada instrucción se coloca sola en el slot que le corresponde por su tipo; los slots omitidos se llenan con NOP.
+- Formas: `SUM rs1, rs2, rd`; `SUMI rs1, imm, rd`; `CP off(rbase), rd`; `AP off(rbase), rs`; `SIG rs1, rs2, etiqueta`; `S etiqueta`; `SYE etiqueta`; `SRG rs`; `FIN`; `LOADKEY rs, key_idx, subkey_idx`; `FROUND rs_L, rs_R, key_idx, round_idx, rd_L, rd_R`; `AUTH rs`; `LOGOUT`; `RDSR rd`; `NOP`.
+- Registros `r0`..`r31`, alias `zero`, `gp`(r28), `sp`(r29), `fp`(r30), `ra`(r31).
+- Directivas: `.text`, `.data`, `.word`, `.space`, `.align`, `.equ`. Comentarios con `;`.
+
+```asm
+inicio:  SUMI r0, 10, r1  | CP 0(r28), r4
+         NOP
+         NOP
+         SUM r1, r4, r3   | AP 4(r28), r3  | SIG r1, r0, fin
+fin:     FIN
+```
+
+### Green sheet v1.1 (todas las instrucciones, con palabra hexadecimal de 32 bits)
+
+Generada con `tools/vliwasm.py`. El ejemplo de salto asume una etiqueta en `0x20` y la instrucción en la dirección 0. El opcode son los bits `[2:0]` de la palabra; el slot indica en qué posición del bundle debe ir.
+
+| Instrucción | Slot | Ejemplo | Palabra | Opcode `[2:0]` | funct `[6:3]` |
+|---|---|---|---|---|---|
+| SUM | 0 | `SUM r1, r2, r3` | `0x00022180` | `000` | `0000` |
+| REST | 0 | `REST r1, r2, r3` | `0x00022188` | `000` | `0001` |
+| MUL | 0 | `MUL r1, r2, r3` | `0x00022190` | `000` | `0010` |
+| DIV | 0 | `DIV r1, r2, r3` | `0x00022198` | `000` | `0011` |
+| OLY | 0 | `OLY r1, r2, r3` | `0x000221A0` | `000` | `0100` |
+| OLO | 0 | `OLO r1, r2, r3` | `0x000221A8` | `000` | `0101` |
+| LOE | 0 | `LOE r1, r2, r3` | `0x000221B0` | `000` | `0110` |
+| DLI | 0 | `DLI r1, r2, r3` | `0x000221B8` | `000` | `0111` |
+| DLD | 0 | `DLD r1, r2, r3` | `0x000221C0` | `000` | `1000` |
+| COMP | 0 | `COMP r1, r2, r3` | `0x000221C8` | `000` | `1001` |
+| SUMI | 0 | `SUMI r1, 5, r3` | `0x04005181` | `001` | `0000` |
+| RESTI | 0 | `RESTI r1, 5, r3` | `0x04005189` | `001` | `0001` |
+| MULI | 0 | `MULI r1, 5, r3` | `0x04005191` | `001` | `0010` |
+| DIVI | 0 | `DIVI r1, 5, r3` | `0x04005199` | `001` | `0011` |
+| DLII | 0 | `DLII r1, 5, r3` | `0x040051A1` | `001` | `0100` |
+| DLDI | 0 | `DLDI r1, 5, r3` | `0x040051A9` | `001` | `0101` |
+| CP | 1 | `CP 8(r28), r4` | `0x70008202` | `010` | `0000` |
+| AP | 1 | `AP 8(r28), r4` | `0x7000820A` | `010` | `0001` |
+| SIG | 2 | `SIG r1, r2, etq` | `0x00021103` | `011` | `0000` |
+| SNIG | 2 | `SNIG r1, r2, etq` | `0x0002110B` | `011` | `0001` |
+| SMI | 2 | `SMI r1, r2, etq` | `0x00021113` | `011` | `0010` |
+| SMQ | 2 | `SMQ r1, r2, etq` | `0x0002111B` | `011` | `0011` |
+| S | 2 | `S etq` | `0x000000A3` | `011` | `0100` |
+| SYE | 2 | `SYE etq` | `0x000000AB` | `011` | `0101` |
+| SRG | 2 | `SRG r31` | `0x0001F033` | `011` | `0110` |
+| FIN | 2 | `FIN` | `0x0000003B` | `011` | `0111` |
+| LOADKEY | 3 | `LOADKEY r6, 1, 2` | `0x00120304` | `100` | `0000` |
+| FROUND | 3 | `FROUND r1, r2, 0, 3, r3, r4` | `0x0C98110C` | `100` | `0001` |
+| AUTH | 3 | `AUTH r5` | `0x00000285` | `101` | `0000` |
+| LOGOUT | 3 | `LOGOUT` | `0x0000000D` | `101` | `0001` |
+| RDSR | 3 | `RDSR r7` | `0x00000395` | `101` | `0010` |
+
+NOP canónicos: slot 0 `0x00000078`, slot 1 `0x0000007A`, slot 2 `0x0000007B`, slot 3 `0x0000007C`.
