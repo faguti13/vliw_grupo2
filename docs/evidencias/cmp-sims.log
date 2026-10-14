@@ -1,0 +1,32 @@
+verilator --binary --timing --trace -Wno-fatal -Wno-lint -Wno-style -Wno-WIDTH --top-module tb_top \
+    -Mdir build/vl rtl/vliw_pkg.sv rtl/memory.sv rtl/regfile.sv rtl/alu.sv rtl/lsu.sv rtl/bru.sv rtl/key_vault.sv rtl/crypto_unit.sv rtl/dispatch.sv rtl/fetch.sv rtl/core.sv rtl/top.sv tb/hazard_monitor.sv tb/tb_top.sv
+make[1]: Entering directory '/home/tomeito/GitProjects/vliw_grupo2/build/vl'
+g++ -Os  -I.  -MMD -I/home/tomeito/oss-cad-suite/share/verilator/include -I/home/tomeito/oss-cad-suite/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=1 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=1 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fcf-protection=none -Wno-bool-operation -Wno-int-in-bool-context -Wno-shadow -Wno-sign-compare -Wno-subobject-linkage -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable  -DVM_PREFIX_INCLUDE="<Vtb_top.h>"   -DVL_TIME_CONTEXT   -fcoroutines -c -o verilated.o /home/tomeito/oss-cad-suite/share/verilator/include/verilated.cpp
+g++ -Os  -I.  -MMD -I/home/tomeito/oss-cad-suite/share/verilator/include -I/home/tomeito/oss-cad-suite/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=1 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=1 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fcf-protection=none -Wno-bool-operation -Wno-int-in-bool-context -Wno-shadow -Wno-sign-compare -Wno-subobject-linkage -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable  -DVM_PREFIX_INCLUDE="<Vtb_top.h>"   -DVL_TIME_CONTEXT   -fcoroutines -c -o verilated_vcd_c.o /home/tomeito/oss-cad-suite/share/verilator/include/verilated_vcd_c.cpp
+g++ -Os  -I.  -MMD -I/home/tomeito/oss-cad-suite/share/verilator/include -I/home/tomeito/oss-cad-suite/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=1 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=1 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fcf-protection=none -Wno-bool-operation -Wno-int-in-bool-context -Wno-shadow -Wno-sign-compare -Wno-subobject-linkage -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable  -DVM_PREFIX_INCLUDE="<Vtb_top.h>"   -DVL_TIME_CONTEXT   -fcoroutines -c -o verilated_timing.o /home/tomeito/oss-cad-suite/share/verilator/include/verilated_timing.cpp
+g++ -Os  -I.  -MMD -I/home/tomeito/oss-cad-suite/share/verilator/include -I/home/tomeito/oss-cad-suite/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=1 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=1 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fcf-protection=none -Wno-bool-operation -Wno-int-in-bool-context -Wno-shadow -Wno-sign-compare -Wno-subobject-linkage -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable  -DVM_PREFIX_INCLUDE="<Vtb_top.h>"   -DVL_TIME_CONTEXT   -fcoroutines -c -o verilated_threads.o /home/tomeito/oss-cad-suite/share/verilator/include/verilated_threads.cpp
+python3 /home/tomeito/oss-cad-suite/share/verilator/bin/verilator_includer -DVL_INCLUDE_OPT=include Vtb_top.cpp Vtb_top___024root__0.cpp Vtb_top__main.cpp Vtb_top__Trace__0.cpp Vtb_top__ConstPool__0__Slow.cpp Vtb_top___024root__Slow.cpp Vtb_top___024root__0__Slow.cpp Vtb_top__Syms__Slow.cpp Vtb_top__Trace__0__Slow.cpp Vtb_top__TraceDecls__0__Slow.cpp > Vtb_top__ALL.cpp
+g++ -Os  -I.  -MMD -I/home/tomeito/oss-cad-suite/share/verilator/include -I/home/tomeito/oss-cad-suite/share/verilator/include/vltstd -DVERILATOR=1 -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TIMING=1 -DVM_TRACE=1 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=1 -DVM_TRACE_SAIF=0 -DVM_VPI=0 -faligned-new -fcf-protection=none -Wno-bool-operation -Wno-int-in-bool-context -Wno-shadow -Wno-sign-compare -Wno-subobject-linkage -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable  -DVM_PREFIX_INCLUDE="<Vtb_top.h>"   -DVL_TIME_CONTEXT   -fcoroutines -c -o Vtb_top__ALL.o Vtb_top__ALL.cpp
+g++    verilated.o verilated_vcd_c.o verilated_timing.o verilated_threads.o Vtb_top__ALL.a    -pthread -lpthread -latomic   -o Vtb_top
+rm Vtb_top__ALL.verilator_deplist.tmp
+make[1]: Leaving directory '/home/tomeito/GitProjects/vliw_grupo2/build/vl'
+- V e r i l a t i o n   R e p o r t: Verilator 5.053 devel rev v5.052-385-gb8e7f1e4b (mod)
+- Verilator: Built from 0.381 MB sources in 16 modules, into 0.481 MB in 10 C++ files needing 0.000 MB
+- Verilator: Walltime 20.026 s (elab=0.012, cvt=0.099, bld=19.884); cpu 0.134 s on 1 threads; allocated 25.180 MB
+iverilog -g2012 -Wall -o build/tb_top.vvp rtl/vliw_pkg.sv rtl/memory.sv rtl/regfile.sv rtl/alu.sv rtl/lsu.sv rtl/bru.sv rtl/key_vault.sv rtl/crypto_unit.sv rtl/dispatch.sv rtl/fetch.sv rtl/core.sv rtl/top.sv tb/hazard_monitor.sv tb/tb_top.sv
+isa_completa: PASS
+alu_paralelo: PASS
+memoria: PASS
+saltos: PASS
+fround: PASS
+feistel_bloque: PASS
+boveda: PASS
+mixto: PASS
+cmp-sims isa_completa: IGUAL
+cmp-sims alu_paralelo: IGUAL
+cmp-sims memoria: IGUAL
+cmp-sims saltos: IGUAL
+cmp-sims fround: IGUAL
+cmp-sims feistel_bloque: IGUAL
+cmp-sims boveda: IGUAL
+cmp-sims mixto: IGUAL
