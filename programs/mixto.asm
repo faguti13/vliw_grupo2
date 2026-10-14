@@ -1,19 +1,22 @@
-; mixto.asm - Lazo de cifrado que combina ALU, LSU, BRU y FROUND en los mismos bundles.
+; Lazo de cifrado que combina ALU, LSU, BRU y FROUND en los mismos bundles.
 ;
-; Qué hace: arma la credencial y 4 palabras de llave con SUMI/DLII (constantes de 32 bits
-;   por partes), se autentica con AUTH, las carga en la bóveda con LOADKEY (0..3) y cifra
-;   en el lugar 3 bloques de 8 bytes (L, R) de .data con 4 rondas FROUND cada uno.
-;   Cada iteración: CP de L y R, 4 FROUND encadenadas (los registros de salida de una
-;   son la entrada de la siguiente), y AP de vuelta. SMQ r13 < 3 cierra el lazo.
-; Qué mezcla en un mismo bundle: CP + SUMI, FROUND + SUMI (contador r15 = 12 rondas),
-;   AP + SUM + SMQ (el salto va junto al último AP).
-; Qué supone: sin forwarding, un GPR se lee 3 bundles después de escribirse, y un salto
-;   tomado descarta 2 bundles (por eso hay NOP tras el SMQ). LOADKEY ve el SR 1 bundle
-;   después de AUTH. La credencial y las llaves nunca se escriben en memoria.
-; Qué lo prueba: mixto.expect (r13 = 3, r15 = 12, las 6 palabras cifradas y forbid de las
-;   palabras de llave) y la comparación con feistel4_ref sobre los mismos datos.
+; Arma la credencial y una llave de 128 bits (4 palabras de 32 bits, una por ronda),
+; se autentica con AUTH, carga la llave en la bóveda con LOADKEY (0..3)
+; y cifra en el lugar 3 bloques de 8 bytes (L, R) de .data con 4 rondas FROUND cada uno.
+
+; Cada iteración: CP de L y R, 4 FROUND encadenadas (los registros de salida de una son la entrada de la siguiente),
+; y AP de vuelta. SMQ r13 < 3 cierra el lazo.
+
+; Mezcla en un mismo bundle: CP + SUMI, FROUND + SUMI (contador r15 = 12 rondas),
+; AP + SUM + SMQ (el salto va junto al último AP).
+; Supone que no hay forwarding, un GPR se lee 3 bundles después de escribirse,
+; y un salto tomado descarta 2 bundles (por eso hay NOP tras el SMQ). LOADKEY ve el SR 1 bundle después de AUTH.
+; La credencial y las llaves nunca se escriben en memoria.
+
+; Resultados esperados: mixto.expect (r13 = 3, r15 = 12, las 6 palabras cifradas
+; y forbid de las palabras de llave) y la comparación con feistel4_ref sobre los mismos datos.
 .text
-        ; --- Preparación: gp, credencial (r5), palabra 0 de la llave (r6) y puntero (r10) ---
+        ; Preparación: gp, credencial (r5), palabra 0 de la llave (r6) y puntero (r10)
         SUMI r0, 1, r28                                        ; gp = 1; con el DLII se completa gp = 0x10000
         SUMI r0, 811, r5                                       ; r5 (credencial) = 811 = 0x32b
         SUMI r0, 0, r6                                         ; r6 (palabra de llave) = 0
@@ -30,7 +33,7 @@
         SUMI r5, 564, r5                                       ; r5 = r5 + 564 -> credencial = 0xcafe1234
         SUMI r6, 563, r6                                       ; r6 = (548 << 11) + 563 = 0x112233 (palabra 0 de la llave)
         DLII r10, 11, r10                                      ; r10 = 32 << 11 = 0x10000, dirección del primer bloque
-        ; --- Autenticación y carga de las 4 palabras de la llave (LOADKEY k=0, ranuras 0..3) ---
+        ; Autenticación y carga de las 4 palabras de la llave (LOADKEY k=0, ranuras 0..3)
         SUMI r0, 0, r13 | AUTH r5                              ; r13 = 0 (bloques cifrados) | AUTH con la credencial de r5
         SUMI r0, 273, r6 | LOADKEY r6, 0, 0                    ; r6 = 273, inicia la palabra 1 | LOADKEY guarda 0x112233 en la ranura 0 (ve el SR de AUTH)
         SUMI r10, 0, r10                                       ; r10 = 0x10000 (copia, sin cambio)
@@ -80,7 +83,7 @@
         SUM r0, r0, r6 | LOADKEY r6, 0, 3                      ; r6 = 0 (borra la palabra de llave del registro) | LOADKEY guarda 0xccddeeff en la ranura 3
         NOP
         NOP
-        ; --- Lazo: lee un bloque (L, R), aplica 4 rondas FROUND y lo guarda cifrado en el mismo lugar ---
+        ; Lazo: lee un bloque (L, R), aplica 4 rondas FROUND y lo guarda cifrado en el mismo lugar
 Lloop:  CP 0(r10), r1 | SUMI r10, 8, r12                       ; carga L del bloque actual | r12 = dirección del siguiente bloque (r10 + 8)
         CP 4(r10), r2 | SUMI r13, 1, r13                       ; carga R del bloque actual | r13 = r13 + 1 (bloques procesados)
         NOP
@@ -101,7 +104,7 @@ Lloop:  CP 0(r10), r1 | SUMI r10, 8, r12                       ; carga L del blo
         AP 4(r10), r2 | SUM r12, r0, r10 | SMQ r13, r14, Lloop ; guarda R cifrado | r10 = r12 (siguiente bloque) | repite el lazo si r13 < r14 (3)
         NOP
         NOP
-        ; --- Fin ---
+        ; Fin
         FIN                                                    ; detiene el procesador una vez vaciado el pipeline
 .data
         .word 0x0, 0x0                    ; bloque 0: L = 0, R = 0
