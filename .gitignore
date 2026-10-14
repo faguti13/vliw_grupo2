@@ -1,0 +1,6 @@
+build/
+obj_dir/
+*.vcd
+__pycache__/
+*.pyc
+memory_dump.txt
