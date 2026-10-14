@@ -40,6 +40,7 @@ Con versiones anteriores:
 | `make run PROG=programs/mixto.asm` | Ensambla y ejecuta un programa |
 | `make wave` | Abre `build/waves/run.vcd` en GTKWave |
 | `make demo-archivo` / `make demo-imagen` | Cifra y descifra un archivo de texto / una imagen BMP en el procesador y compara con la referencia en C |
+| `make enc` / `make dec` / `make crypto` | Cifra o descifra **cualquier** archivo en el RTL, con la llave que se pase. `OUT=` pone la extensión (p. ej. `OUT=foto.png`). `OPEN=1` abre el resultado |
 | `make demo-compilador` | Compila los ejercicios JAF con `P1_CE1108`, los ejecuta en el RTL y los verifica |
 | `make demo` | Simulación base más ambas demos de archivo |
 
@@ -56,6 +57,16 @@ python3 tools/bin2mem.py programa.bin programa.mem        # .bin (p. ej. del com
 - **Texto:** `load_file.py` coloca el archivo en el buffer `0x20000` y deja en el mailbox `0x1FFF0` la dirección, el tamaño y el número de bloques.
 - **Binario / imagen:** el mismo mecanismo; para BMP solo se cifran los píxeles (`tools/demo.sh imagen`).
 - **Salida:** `extract_data.py` recupera el buffer del volcado de memoria del testbench.
+
+```
+# round-trip (cifra, descifra, cmp). La llave son 32 hex = 4 subllaves.
+make crypto IN=foto.png KEY=00112233445566778899aabbccddeeff OUT=foto.out.png
+
+# defensa: archivo cifrado + llave del profesor → imagen listo para abrir
+make dec IN=secreto.bin KEY=aabbccddeeff00112233445566778899 OUT=foto.png OPEN=1
+```
+
+`make enc`/`dec`/`crypto` generan el ensamblador con esa llave (no usan a ciegas `programs/*_buffer.asm`), lo corren en el RTL y escriben `OUT`. Si el original no era múltiplo de 8 bytes, el cifrado lleva relleno; en `make dec` se puede recortar con `SIZE=<bytes originales>`.
 
 Sintaxis y codificaciones: `docs/isa.md` (incluye la green sheet completa).
 

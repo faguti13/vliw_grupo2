@@ -7,6 +7,9 @@
 #   make sim-verilator PROG=programs/mixto.asm   simulacion con Verilator
 #   make asm PROG=programs/x.asm                 ensambla a build/x.mem
 #   make run PROG=programs/x.asm | BIN=archivo.bin   corre un programa
+#   make enc IN=archivo KEY=32hex [OUT=salida.bin]   cifra un archivo en el RTL
+#   make dec IN=archivo KEY=32hex [OUT=foto.png]     descifra; la extension la pone OUT
+#   make crypto IN=foto.png KEY=32hex [OUT=foto.png] cifra, descifra y compara
 #   make wave TB=tb_top      abre el VCD en GTKWave
 #   make vectors             vectores Feistel4 desde la referencia en C
 #   make demo-archivo | demo-imagen | demo-compilador | demo | clean
@@ -25,7 +28,7 @@ TIMEOUT ?= 2000000
 # Programas de regresion: cada uno tiene programs/<n>.asm y programs/<n>.expect
 PROGS := isa_completa alu_paralelo memoria saltos fround feistel_bloque boveda mixto
 
-.PHONY: all sim test lint sim-verilator asm run wave vectors clean demo demo-archivo demo-imagen demo-compilador
+.PHONY: all sim test lint sim-verilator asm run wave vectors clean demo demo-archivo demo-imagen demo-compilador enc dec crypto
 
 all: sim
 
@@ -101,6 +104,36 @@ $(BUILD)/vl/Vtb_top: $(RTL) tb/tb_top.sv tb/hazard_monitor.sv | $(BUILD)
 sim-verilator: $(BUILD)/vl/Vtb_top
 	@set -e; $(MAKE) -s asm PROG=$(PROG); \
 	$(BUILD)/vl/Vtb_top +PROG=$(BUILD)/$(basename $(notdir $(PROG))).mem +REGS=$(BUILD)/vl.regs +TIMEOUT=$(TIMEOUT)
+
+# ---- Cifrado / descifrado de un archivo cualquiera ----
+# KEY: 32 hex (4 subllaves). OUT pone la extension (p.ej. OUT=foto.png).
+# SIZE: en dec, recorta al tamano original si el cifrado trae relleno a 8 bytes.
+# OPEN=1 abre el resultado (wslview / xdg-open).
+KEY     ?= 00112233445566778899aabbccddeeff
+IN      ?=
+OUT     ?=
+ADDR    ?= 0x20000
+SIZE    ?=
+OPEN    ?= 0
+
+define CRYPTO_NEED_IN
+	@test -n "$(IN)" || { echo "uso: make $@ IN=archivo KEY=32hex [OUT=salida] [SIZE=n] [OPEN=1]"; exit 2; }
+endef
+
+enc: $(BUILD)/tb_top.vvp
+	$(CRYPTO_NEED_IN)
+	bash tools/crypto_file.sh enc --input "$(IN)" --key "$(KEY)" $(if $(OUT),--output "$(OUT)",) --address $(ADDR) \
+	    $(if $(filter 1,$(OPEN)),--open,)
+
+dec: $(BUILD)/tb_top.vvp
+	$(CRYPTO_NEED_IN)
+	bash tools/crypto_file.sh dec --input "$(IN)" --key "$(KEY)" $(if $(OUT),--output "$(OUT)",) --address $(ADDR) \
+	    $(if $(SIZE),--size $(SIZE),) $(if $(filter 1,$(OPEN)),--open,)
+
+crypto: $(BUILD)/tb_top.vvp
+	$(CRYPTO_NEED_IN)
+	bash tools/crypto_file.sh crypto --input "$(IN)" --key "$(KEY)" $(if $(OUT),--output "$(OUT)",) --address $(ADDR) \
+	    $(if $(SIZE),--size $(SIZE),) $(if $(filter 1,$(OPEN)),--open,)
 
 # ---- Demos ----
 demo-archivo: $(BUILD)/tb_top.vvp $(BUILD)/feistel4_ref

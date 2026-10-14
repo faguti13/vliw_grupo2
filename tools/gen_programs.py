@@ -284,13 +284,20 @@ def gen_mixto(d):
           lines + ["        FIN"] + data, exp)
 
 
-def gen_buffer(d, modo):
-    """cifrar_buffer / descifrar_buffer: leen el buzon 0x1FFF0 (direccion, tamano, bloques) y
-    transforman el buffer en el lugar con la llave de demostracion (llave 0 de la boveda)."""
+def parse_key_hex(s):
+    h = re.sub(r"(?i)^0x", "", re.sub(r"[\s_]", "", s))
+    if len(h) != 32 or any(c not in "0123456789abcdefABCDEF" for c in h):
+        sys.stderr.write("llave: 32 digitos hex (4 subllaves de 8), p.ej. 00112233445566778899aabbccddeeff\n")
+        sys.exit(2)
+    return [int(h[i:i + 8], 16) for i in range(0, 32, 8)]
+
+
+def asm_buffer(modo, key):
+    """Bundles para cifrar o descifrar el buffer del buzon 0x1FFF0 con `key` en la llave 0."""
     s = Sched()
     s.gp()
     auth(s)
-    loadkeys(s, KEY, 0)
+    loadkeys(s, key, 0)
     s.const(27, 0x1FFF0)
     s.put("CP", "CP 0(r27), r10", [27], [10])     # direccion del buffer
     s.put("CP", "CP 8(r27), r14", [27], [14])     # cantidad de bloques de 8 bytes
@@ -316,14 +323,57 @@ def gen_buffer(d, modo):
     B("AP 0(r10), r1")
     B("AP 4(r10), r2", "SUM r12, r0, r10", "SMQ r13, r14, Lloop")
     B(); B()
-    lines = pre + ["Lloop:" + body[0][6:]] + body[1:]
-    write(d, modo + "_buffer", [f"; {modo}_buffer.asm - {modo.capitalize()} en el lugar el buffer indicado por el buzon de E/S (0x1FFF0)"],
-          lines + ["        FIN"], [])
+    header = [f"; {modo}_buffer.asm - {modo.capitalize()} en el lugar el buffer indicado por el buzon de E/S (0x1FFF0)"]
+    lines = pre + ["Lloop:" + body[0][6:]] + body[1:] + ["        FIN"]
+    return header, lines
+
+
+def gen_buffer(d, modo, key=None):
+    """cifrar_buffer / descifrar_buffer: leen el buzon 0x1FFF0 (direccion, tamano, bloques) y
+    transforman el buffer en el lugar con la llave indicada (por omision la de demostracion)."""
+    header, lines = asm_buffer(modo, key or KEY)
+    write(d, modo + "_buffer", header, lines, [])
     os.remove(os.path.join(d, modo + "_buffer.expect"))
 
 
+def emit_buffer(path, modo, key):
+    header, lines = asm_buffer(modo, key)
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w") as f:
+        f.write("\n".join(header + [".text"] + lines) + "\n")
+
+
 def main():
-    d = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), "..", "programs")
+    argv = sys.argv[1:]
+    if argv and argv[0] in ("-h", "--help"):
+        print("uso: gen_programs.py [dir]                  # regenera programs/*.asm")
+        print("     gen_programs.py --buffer cifrar|descifrar --key HEX --out archivo.asm")
+        return
+    if argv and argv[0] == "--buffer":
+        modo = argv[1] if len(argv) > 1 else ""
+        if modo in ("enc", "encrypt"):
+            modo = "cifrar"
+        if modo in ("dec", "decrypt"):
+            modo = "descifrar"
+        if modo not in ("cifrar", "descifrar"):
+            sys.stderr.write("uso: gen_programs.py --buffer cifrar|descifrar --key HEX --out archivo.asm\n")
+            sys.exit(2)
+        key, out = KEY, None
+        i = 2
+        while i < len(argv):
+            if argv[i] == "--key" and i + 1 < len(argv):
+                key = parse_key_hex(argv[i + 1]); i += 2
+            elif argv[i] == "--out" and i + 1 < len(argv):
+                out = argv[i + 1]; i += 2
+            else:
+                sys.stderr.write(f"argumento no reconocido: {argv[i]}\n")
+                sys.exit(2)
+        if not out:
+            sys.stderr.write("falta --out archivo.asm\n")
+            sys.exit(2)
+        emit_buffer(out, modo, key)
+        return
+    d = argv[0] if argv else os.path.join(os.path.dirname(__file__), "..", "programs")
     gen_fround(d)
     gen_feistel(d)
     gen_boveda(d)
