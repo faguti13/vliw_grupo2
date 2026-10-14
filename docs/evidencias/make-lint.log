@@ -1,0 +1,5 @@
+# Lint con Verilator 5.053. Se agrego localmente el salto de linea final a rtl/memory.sv (EOFNEWLINE); la correccion queda pendiente para P1 en feat/datapath.
+verilator --lint-only -Wall -Wno-DECLFILENAME -Wno-UNUSEDSIGNAL -Wno-UNUSEDPARAM -Wno-PINCONNECTEMPTY --top-module top rtl/vliw_pkg.sv rtl/memory.sv rtl/regfile.sv rtl/alu.sv rtl/lsu.sv rtl/bru.sv rtl/key_vault.sv rtl/crypto_unit.sv rtl/dispatch.sv rtl/fetch.sv rtl/core.sv rtl/top.sv
+- V e r i l a t i o n   R e p o r t: Verilator 5.053 devel rev v5.052-385-gb8e7f1e4b (mod)
+- Verilator: Built from 0.303 MB sources in 14 modules, into 0.109 MB in 3 C++ files needing 0.000 MB
+- Verilator: Walltime 0.055 s (elab=0.009, cvt=0.030, bld=0.000); cpu 0.055 s on 1 threads; allocated 22.090 MB
