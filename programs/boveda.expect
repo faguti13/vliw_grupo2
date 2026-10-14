@@ -1,0 +1,22 @@
+# la boveda bloquea sin AUTH, AUTH falla con credencial incorrecta, las llaves no son legibles
+r1 = 0x11111111
+r2 = 0x22222222
+r20 = 0x6
+r21 = 0xa
+r22 = 0x1
+r23 = 0x0
+r24 = 0x6
+sr = 0x6
+r3 = 0xbbbb
+r4 = 0x175f5339
+r7 = 0xbbbb
+r8 = 0x1cb2adc7
+forbid 0x112233
+forbid 0x44556677
+forbid 0x8899aabb
+forbid 0xccddeeff
+forbid 0xbadf00d
+forbid 0x13572468
+forbid 0xdeadbeef
+forbid 0x1234567
+forbid 0xa5a5a5a5
