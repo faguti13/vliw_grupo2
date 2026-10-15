@@ -1,0 +1,14 @@
+feistel4_ref (3 bloques de mixto.asm):
+2918cb13
+94aaf892
+2b6fb0f2
+d11fefcc
+dee9d742
+0fe5b007
+mixto.expect:
+mem 0x10000 = 0x2918cb13
+mem 0x10004 = 0x94aaf892
+mem 0x10008 = 0x2b6fb0f2
+mem 0x1000c = 0xd11fefcc
+mem 0x10010 = 0xdee9d742
+mem 0x10014 = 0xfe5b007

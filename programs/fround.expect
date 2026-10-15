@@ -1,0 +1,10 @@
+# una ronda: L' = R, R' = L ^ F(R, K0)
+mem 0x10000 = 0x4b5c952c
+mem 0x10004 = 0xdcddb416
+r3 = 0x4b5c952c
+r4 = 0xdcddb416
+sr = 0x1
+forbid 0x112233
+forbid 0x44556677
+forbid 0x8899aabb
+forbid 0xccddeeff

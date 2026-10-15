@@ -1,0 +1,81 @@
+[*]
+[*] Vista GTKWave para tb_top. Abrir desde la raiz del repo:
+[*]   gtkwave build/waves/run.vcd tb/waves/tb_top.gtkw
+[*]   o: make wave
+[*]
+[*] Contraste con la tabla de simbolos (jaf -m / make tabla):
+[*]   dir CP/AP  == gp+offset o fp+offset de la tabla (p.ej. resultado = 0x10000)
+[*]   rbase      == gp (0x10000, r28) o fp (marco de pila, r30)
+[*]   offset     == desplazamiento de la instruccion (gp+0, fp-4, ...)
+[*]   dato AP    == valor escrito en esa variable
+[*]   PC         == direccion de codigo (bundles), NO es un simbolo JAF
+[*]   waddr WB   == numero de GPR (r0..r31), NO es direccion de memoria
+[*]
+[dumpfile] "build/waves/run.vcd"
+[savefile] "tb/waves/tb_top.gtkw"
+[timestart] 0
+[size] 1400 800
+[pos] -1 -1
+*-12.000000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] tb_top.
+[treeopen] tb_top.dut.
+[treeopen] tb_top.dut.u_core.
+[treeopen] tb_top.dut.u_core.u_lsu.
+[treeopen] tb_top.dut.u_mem.
+[sst_width] 260
+[signals_width] 320
+[sst_expanded] 1
+[sst_vpaned_height] 280
+@28
+tb_top.clk
+tb_top.rst
+tb_top.halted
+@22
++{ciclos} tb_top.cycles[31:0]
+@200
+-control
+@28
+tb_top.dut.u_core.idex_valid
+tb_top.dut.u_core.ex_taken
+tb_top.dut.u_core.ex_flush
+@22
++{PC fetch (codigo)} tb_top.dut.u_core.pc[31:0]
++{PC en EX} tb_top.dut.u_core.idex_pc[31:0]
++{destino salto} tb_top.dut.u_core.ex_target[31:0]
++{SR} tb_top.dut.u_core.sr[31:0]
+@200
+-tabla simbolos: dir = rbase + offset
+@28
++{AP escribe mem} tb_top.dut.dmem_we
+@22
++{rbase LSU (gp o fp)} tb_top.dut.u_core.u_lsu.base[31:0]
++{offset instr (simm)} tb_top.dut.u_core.u_lsu.simm[31:0]
++{dir CP/AP (= tabla)} tb_top.dut.dmem_addr[31:0]
++{dir alineada} tb_top.dut.u_mem.da[31:0]
++{dato AP (store)} tb_top.dut.dmem_wdata[31:0]
++{dato CP (load)} tb_top.dut.dmem_rdata[31:0]
+@200
+-LSU / memoria (mismos buses)
+@22
++{LSU addr} tb_top.dut.u_core.u_lsu.addr[31:0]
++{LSU wdata} tb_top.dut.u_core.u_lsu.mem_wdata[31:0]
++{core dmem_addr} tb_top.dut.u_core.dmem_addr[31:0]
+@28
+tb_top.dut.u_core.u_lsu.mem_we
+tb_top.dut.u_core.dmem_we
+@200
+-pipeline / slots del bundle en EX
+@22
++{slot0 ALU} tb_top.dut.u_core.e0[31:0]
++{slot1 LSU} tb_top.dut.u_core.e1[31:0]
++{slot2 BRU} tb_top.dut.u_core.e2[31:0]
++{slot3 cripto} tb_top.dut.u_core.e3[31:0]
++{bundle EX} tb_top.dut.u_core.idex_bundle[127:0]
+@200
+-WB: numero de registro, no dir de simbolo
+@22
++{wen WB} tb_top.dut.u_core.exwb_wen[4:0]
++{waddr WB (rN)} tb_top.dut.u_core.exwb_waddr[24:0]
++{wdata WB} tb_top.dut.u_core.exwb_wdata[159:0]
+[pattern_trace] 1
+[pattern_trace] 0
