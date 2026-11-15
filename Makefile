@@ -3,6 +3,7 @@
 #   make sim                 regresion completa en Icarus Verilog (unitarios + programas)
 #   make sim TB=tb_alu       un solo testbench
 #   make test                resumen PASS/FAIL de toda la regresion
+#   make l2                  cache L2 sola, con stubs de L1, eviction y DRAM
 #   make lint                Verilator --lint-only -Wall
 #   make sim-verilator PROG=programs/mixto.asm   simulacion con Verilator
 #   make asm PROG=programs/x.asm                 ensambla a build/x.mem
@@ -28,7 +29,7 @@ TIMEOUT ?= 2000000
 # Programas de regresion: cada uno tiene programs/<n>.asm y programs/<n>.expect
 PROGS := isa_completa alu_paralelo memoria saltos fround feistel_bloque boveda mixto
 
-.PHONY: all sim test lint sim-verilator asm run wave vectors clean demo demo-archivo demo-imagen demo-compilador enc dec crypto
+.PHONY: all sim test lint sim-verilator asm run wave vectors clean demo demo-archivo demo-imagen demo-compilador enc dec crypto l2
 
 all: sim
 
@@ -74,6 +75,13 @@ progs: $(BUILD)/tb_top.vvp $(addprefix $(BUILD)/,$(addsuffix .mem,$(PROGS))) $(B
 	done
 
 test: sim
+
+# L2 inclusiva aislada. No entra en `make test`: no usa el RTL de L1 ni el de DRAM.
+$(BUILD)/tb_l2_coherence.vvp: tb/tb_l2_coherence.sv rtl/l2_cache.sv | $(BUILD)
+	$(IVERILOG) -g2012 -Wall -Wno-sensitivity-entire-array -o $@ rtl/l2_cache.sv tb/tb_l2_coherence.sv
+
+l2: $(BUILD)/tb_l2_coherence.vvp
+	$(VVP) -n $(BUILD)/tb_l2_coherence.vvp
 
 # ---- Ensamblar / ejecutar un programa ----
 asm: $(BUILD)
