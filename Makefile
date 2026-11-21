@@ -27,7 +27,8 @@ UNIT_TBS := tb_alu tb_regfile tb_lsu tb_bru tb_dispatch tb_key_vault tb_crypto_u
 TIMEOUT ?= 2000000
 
 # Programas de regresion: cada uno tiene programs/<n>.asm y programs/<n>.expect
-PROGS := isa_completa alu_paralelo memoria saltos fround feistel_bloque boveda mixto
+PROGS := isa_completa alu_paralelo memoria saltos fround feistel_bloque boveda mixto \
+         bench_secuencial bench_stride bench_aleatorio
 
 .PHONY: all sim test lint sim-verilator asm run wave vectors clean demo demo-archivo demo-imagen demo-compilador enc dec crypto l2
 
