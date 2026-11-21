@@ -3,13 +3,16 @@
 //  ID: dispatch de los 4 slots y lectura del banco.
 //  EX: ALU, LSU, BRU y unidad cripto/seguridad en paralelo. Los saltos se resuelven acá.
 //  WB: escritura de resultados en el banco.
-// No hay forwarding, scoreboarding ni stalls ya que eso lo resuelve el planificador(software).
+// El planificador resuelve los riesgos de registros. Un stall de datos congela IF, ID y EX.
 module core #(parameter logic [31:0] CRED = 32'hCAFE1234) (
   input  logic         clk,
   input  logic         rst,
   output logic [31:0]  imem_addr, // dirección a mem de las instr
+  output logic         imem_en,
   input  logic [127:0] imem_data, // bundle leído (128 bits 4 slots)
   output logic [31:0]  dmem_addr, // dirección a memoria de datos
+  input  logic         dmem_stall,
+  output logic         dmem_re,
   output logic         dmem_we,   // write enable de datos
   output logic [31:0]  dmem_wdata, // dato a escribir en mem
   input  logic [31:0]  dmem_rdata, // dato leído de mem
@@ -20,21 +23,22 @@ module core #(parameter logic [31:0] CRED = 32'hCAFE1234) (
 );
   // Etapa 1: IF
   logic [31:0] pc;
-  logic        ex_flush, ex_taken, ex_fin;
+  logic        ex_flush, ex_taken, ex_fin, ex_go;
   logic [31:0] ex_target;
   logic        fin_seen;
   // Fetch: pide el bundle al PC, redirige si hay salto tomado, se detiene con fin o halt 
   fetch u_fetch (.clk(clk), .rst(rst), .redirect(ex_flush && ex_taken), .redirect_pc(ex_target),
-                 .stop(fin_seen || ex_fin || halted), .pc(pc));
+                 .stop(fin_seen || ex_fin || halted), .stall(dmem_stall), .pc(pc));
   assign imem_addr = pc;
-  // Registro IF/ID: guarda el bundle y su PC para la etapa de decode.
+  assign imem_en = !dmem_stall && !fin_seen && !halted;
+  // La salida registrada de la ROM guarda el bundle de IF/ID.
   logic [127:0] ifid_bundle;
   logic [31:0]  ifid_pc;
   logic         ifid_valid;
+  assign ifid_bundle = imem_data;
   always @(posedge clk) begin
-    if (rst) begin ifid_valid <= 1'b0; ifid_bundle <= 128'h0; ifid_pc <= 32'h0; end
-    else begin
-      ifid_bundle <= imem_data;
+    if (rst) begin ifid_valid <= 1'b0; ifid_pc <= 32'h0; end
+    else if (!dmem_stall) begin
       ifid_pc     <= pc;
       // El bundle se invalida si hay flush
       ifid_valid  <= !ex_flush && !fin_seen && !halted;
@@ -70,7 +74,7 @@ module core #(parameter logic [31:0] CRED = 32'hCAFE1234) (
   logic         idex_valid;
   always @(posedge clk) begin
     if (rst) begin idex_valid <= 1'b0; idex_bundle <= 128'h0; idex_pc <= 32'h0; idex_rdata <= 256'h0; end
-    else begin
+    else if (!dmem_stall) begin
       idex_bundle <= ifid_bundle;
       idex_pc     <= ifid_pc;
       idex_rdata  <= id_rdata;
@@ -96,6 +100,8 @@ module core #(parameter logic [31:0] CRED = 32'hCAFE1234) (
     end
   endgenerate
 
+  assign ex_go = idex_valid && !dmem_stall;
+
   // ALU
   logic a_wen, a_ill; logic [4:0] a_rd; logic [31:0] a_y;
   alu u_alu (.instr(e0), .a(rv[0]), .b(rv[1]), .wen(a_wen), .rd(a_rd), .y(a_y), .illegal(a_ill));
@@ -105,24 +111,26 @@ module core #(parameter logic [31:0] CRED = 32'hCAFE1234) (
              .mem_we(l_we), .mem_wdata(l_wdata), .wen(l_wen), .rd(l_rd), .y(l_y), .illegal(l_ill));
   assign dmem_addr  = l_addr;
   assign dmem_wdata = l_wdata;
-  assign dmem_we    = idex_valid && l_we; // solo escribe si el bundle es válido
+  // La LSU mantiene la solicitud hasta que la memoria quite el stall.
+  assign dmem_re    = idex_valid && l_wen;
+  assign dmem_we    = idex_valid && l_we;
   // BRU
   logic b_link, b_fin, b_ill, b_taken; logic [31:0] b_target, b_linkv;
   bru u_bru (.instr(e2), .pc(idex_pc), .a(rv[4]), .b(rv[5]), .taken(b_taken), .target(b_target),
              .link_wen(b_link), .link_val(b_linkv), .fin(b_fin), .illegal(b_ill));
   // Un salto tomado o un FIN descartan los dos bundles que estan en IF e ID
-  assign ex_taken  = idex_valid && b_taken;
-  assign ex_fin    = idex_valid && b_fin;
+  assign ex_taken  = ex_go && b_taken;
+  assign ex_fin    = ex_go && b_fin;
   assign ex_flush  = ex_taken || ex_fin;
   assign ex_target = b_target;
   // Cripto / seguridad
   logic c_wl, c_wr, c_ill; logic [4:0] c_rdl, c_rdr; logic [31:0] c_yl, c_yr, sr;
-  crypto_unit #(.CRED(CRED)) u_crypto (.clk(clk), .rst(rst), .valid(idex_valid), .instr(e3),
+  crypto_unit #(.CRED(CRED)) u_crypto (.clk(clk), .rst(rst), .valid(ex_go), .instr(e3),
       .a(rv[6]), .b(rv[7]), .wen_l(c_wl), .rd_l(c_rdl), .y_l(c_yl), .wen_r(c_wr), .rd_r(c_rdr),
       .y_r(c_yr), .illegal(c_ill), .sr_o(sr));
   // Si alguna unidad resporta instr invalida, se cuenta como ilegal
   logic ex_illegal;
-  assign ex_illegal = idex_valid && (a_ill || l_ill || b_ill || c_ill);
+  assign ex_illegal = ex_go && (a_ill || l_ill || b_ill || c_ill);
 
   // Registro EX/WB: empaqueta los 5 posibles destinos de escritura 
   logic         exwb_valid;
@@ -133,6 +141,11 @@ module core #(parameter logic [31:0] CRED = 32'hCAFE1234) (
   always @(posedge clk) begin
     if (rst) begin
       exwb_valid <= 1'b0; exwb_wen <= 5'b0; exwb_waddr <= 25'h0; exwb_wdata <= 160'h0; exwb_fin <= 1'b0;
+    end else if (dmem_stall) begin
+      // WB termina el bundle anterior y recibe una burbuja mientras EX espera.
+      exwb_valid <= 1'b0;
+      exwb_wen   <= 5'b0;
+      exwb_fin   <= 1'b0;
     end else begin
       exwb_valid <= idex_valid;
       // Ordena los 5 puertos (cripto_r, cripto_l, link, LSU, ALU)
@@ -162,7 +175,7 @@ module core #(parameter logic [31:0] CRED = 32'hCAFE1234) (
 
       //Contadores
       if (ex_illegal) illegal_cnt <= illegal_cnt + 32'd1;
-      if (idex_valid) bundles_exec <= bundles_exec + 32'd1;
+      if (ex_go) bundles_exec <= bundles_exec + 32'd1;
     end
   end
 endmodule

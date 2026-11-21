@@ -64,7 +64,13 @@ module tb_top;
     if ($value$plusargs("VCD=%s", vcd_f)) begin $dumpfile(vcd_f); $dumpvars(0, tb_top); end
 
     // Carga programa y datos en memoria 
-    if ($value$plusargs("PROG=%s", prog)) $readmemh(prog, dut.u_mem.mem);
+    #1; // Las memorias ya terminaron su inicialización.
+    if ($value$plusargs("PROG=%s", prog)) begin
+      $readmemh(prog, dut.u_mem.mem);
+      for (int b = 0; b < $size(dut.u_rom.rom); b++)
+        for (int j = 0; j < 16; j++)
+          dut.u_rom.rom[b][127 - 8*j -: 8] = dut.u_mem.mem[16*b + j];
+    end
     if ($value$plusargs("DATA=%s", data)) $readmemh(data, dut.u_mem.mem);
     
     // Reset (4 ciclos en alto, luego se libera)

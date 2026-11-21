@@ -6,11 +6,12 @@ module fetch (
   input  logic        redirect,    // 1 si un salto tomado cambia el PC 
   input  logic [31:0] redirect_pc, // dirección destino del salto
   input  logic        stop,        // 1 congela el PC
+  input  logic        stall,       // espera de la memoria de datos
   output logic [31:0] pc           // PC actual, apunta al bundle a buscar
 );
   always @(posedge clk) begin
     if (rst)           pc <= 32'h0000_0000; // arranque en 0 
-    else if (redirect) pc <= redirect_pc;   //salto tomado se va al destino
-    else if (!stop)    pc <= pc + 32'd16;   // avanza un bundle
+    else if (redirect && !stall) pc <= redirect_pc;   //salto tomado se va al destino
+    else if (!stop && !stall)    pc <= pc + 32'd16;   // avanza un bundle
   end
 endmodule
