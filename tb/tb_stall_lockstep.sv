@@ -34,7 +34,7 @@ module tb_stall_lockstep;
       .ex_flush(u_core.ex_flush),
       .idex_bundle(u_core.idex_bundle), .idex_valid(u_core.idex_valid),
       .exwb_wen(u_core.exwb_wen), .exwb_waddr(u_core.exwb_waddr),
-      .trace(1'b0), .raw_count(raw_count), .waw_count(waw_count));
+      .stall(dmem_stall), .trace(1'b0), .raw_count(raw_count), .waw_count(waw_count));
 
   // Memoria de datos de comportamiento (64 KB, alias de 16 bits) con stalls inyectados
   logic [7:0] dmem [0:65535];
