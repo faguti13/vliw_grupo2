@@ -11,8 +11,10 @@ module core #(parameter logic [31:0] CRED = 32'hCAFE1234) (
   input  logic [127:0] imem_data, // bundle leído (128 bits 4 slots)
   output logic [31:0]  dmem_addr, // dirección a memoria de datos
   output logic         dmem_we,   // write enable de datos
+   output logic         dmem_re,  //read enable para la caché
   output logic [31:0]  dmem_wdata, // dato a escribir en mem
   input  logic [31:0]  dmem_rdata, // dato leído de mem
+  input  logic         dmem_stall,
   output logic         halted,     // procesador detenido
   output logic [31:0]  illegal_cnt, // contador de instr ilegales
   output logic [31:0]  bundles_exec, // contador de bundles ejecutados
@@ -23,17 +25,20 @@ module core #(parameter logic [31:0] CRED = 32'hCAFE1234) (
   logic        ex_flush, ex_taken, ex_fin;
   logic [31:0] ex_target;
   logic        fin_seen;
+
   // Fetch: pide el bundle al PC, redirige si hay salto tomado, se detiene con fin o halt 
   fetch u_fetch (.clk(clk), .rst(rst), .redirect(ex_flush && ex_taken), .redirect_pc(ex_target),
-                 .stop(fin_seen || ex_fin || halted), .pc(pc));
+                 .stop(fin_seen || ex_fin || halted), .stall(dmem_stall), .pc(pc));
   assign imem_addr = pc;
+  assign imem_en   = !dmem_stall && !fin_seen && !halted;
+
   // Registro IF/ID: guarda el bundle y su PC para la etapa de decode.
   logic [127:0] ifid_bundle;
   logic [31:0]  ifid_pc;
   logic         ifid_valid;
   always @(posedge clk) begin
-    if (rst) begin ifid_valid <= 1'b0; ifid_bundle <= 128'h0; ifid_pc <= 32'h0; end
-    else begin
+    if (rst) begin ifid_valid <= 1'b0; ifid_pc <= 32'h0; end
+    else if (!dmem_stall) begin
       ifid_bundle <= imem_data;
       ifid_pc     <= pc;
       // El bundle se invalida si hay flush
@@ -70,7 +75,7 @@ module core #(parameter logic [31:0] CRED = 32'hCAFE1234) (
   logic         idex_valid;
   always @(posedge clk) begin
     if (rst) begin idex_valid <= 1'b0; idex_bundle <= 128'h0; idex_pc <= 32'h0; idex_rdata <= 256'h0; end
-    else begin
+    else if (!dmem_stall) begin
       idex_bundle <= ifid_bundle;
       idex_pc     <= ifid_pc;
       idex_rdata  <= id_rdata;
@@ -96,6 +101,8 @@ module core #(parameter logic [31:0] CRED = 32'hCAFE1234) (
     end
   endgenerate
 
+  assign ex_go = idex_valid && !dmem_stall; //Evita ejecutar si hay stall
+
   // ALU
   logic a_wen, a_ill; logic [4:0] a_rd; logic [31:0] a_y;
   alu u_alu (.instr(e0), .a(rv[0]), .b(rv[1]), .wen(a_wen), .rd(a_rd), .y(a_y), .illegal(a_ill));
@@ -105,7 +112,9 @@ module core #(parameter logic [31:0] CRED = 32'hCAFE1234) (
              .mem_we(l_we), .mem_wdata(l_wdata), .wen(l_wen), .rd(l_rd), .y(l_y), .illegal(l_ill));
   assign dmem_addr  = l_addr;
   assign dmem_wdata = l_wdata;
-  assign dmem_we    = idex_valid && l_we; // solo escribe si el bundle es válido
+  assign dmem_we    = ex_go && l_we; 
+  assign dmem_re    = ex_go && l_wen;
+  
   // BRU
   logic b_link, b_fin, b_ill, b_taken; logic [31:0] b_target, b_linkv;
   bru u_bru (.instr(e2), .pc(idex_pc), .a(rv[4]), .b(rv[5]), .taken(b_taken), .target(b_target),
@@ -133,6 +142,10 @@ module core #(parameter logic [31:0] CRED = 32'hCAFE1234) (
   always @(posedge clk) begin
     if (rst) begin
       exwb_valid <= 1'b0; exwb_wen <= 5'b0; exwb_waddr <= 25'h0; exwb_wdata <= 160'h0; exwb_fin <= 1'b0;
+    end else if (dmem_stall) begin //Burbuja para evitar escrituras dobles
+      exwb_valid <= 1'b0;
+      exwb_wen   <= 5'b0;
+      exwb_fin   <= 1'b0;
     end else begin
       exwb_valid <= idex_valid;
       // Ordena los 5 puertos (cripto_r, cripto_l, link, LSU, ALU)
@@ -162,7 +175,8 @@ module core #(parameter logic [31:0] CRED = 32'hCAFE1234) (
 
       //Contadores
       if (ex_illegal) illegal_cnt <= illegal_cnt + 32'd1;
-      if (idex_valid) bundles_exec <= bundles_exec + 32'd1;
+
+      if (ex_go) bundles_exec <= bundles_exec + 32'd1; //Usa ex_go para no contar en stall
     end
   end
 endmodule
