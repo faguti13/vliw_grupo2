@@ -21,7 +21,7 @@ PYTHON   ?= python3
 BUILD    := build
 
 RTL := rtl/vliw_pkg.sv rtl/inst_rom.sv rtl/memory.sv rtl/regfile.sv rtl/alu.sv rtl/lsu.sv rtl/bru.sv \
-       rtl/key_vault.sv rtl/crypto_unit.sv rtl/dispatch.sv rtl/fetch.sv rtl/core.sv rtl/perf_counters.sv rtl/top.sv
+       rtl/key_vault.sv rtl/crypto_unit.sv rtl/dispatch.sv rtl/fetch.sv rtl/core.sv rtl/perf_counters.sv rtl/clk_div.sv rtl/dram_ctrl.sv rtl/top.sv
 UNIT_TBS := tb_alu tb_regfile tb_lsu tb_bru tb_dispatch tb_key_vault tb_crypto_unit
 TIMEOUT ?= 2000000
 
@@ -45,6 +45,15 @@ $(BUILD)/vectors.hex: $(BUILD)/feistel4_ref
 	$(BUILD)/feistel4_ref vectors 16 00112233445566778899aabbccddeeff > $@
 
 # ---- Testbenches unitarios ----
+.PHONY: dram-test
+$(BUILD)/tb_dram_ctrl_d%.vvp: tb/tb_dram_ctrl.sv rtl/clk_div.sv rtl/dram_ctrl.sv | $(BUILD)
+	$(IVERILOG) -g2012 -Wall -s tb_dram_ctrl -Ptb_dram_ctrl.DIV=$* -o $@ $^
+
+dram-test: $(addprefix $(BUILD)/tb_dram_ctrl_d,$(addsuffix .vvp,2 4 5))
+	@set -e; for t in $^; do $(VVP) -n $t; done
+
+unit: dram-test
+
 $(BUILD)/%.vvp: tb/%.sv $(RTL) | $(BUILD)
 	$(IVERILOG) -g2012 -Wall -o $@ $(RTL) $<
 
