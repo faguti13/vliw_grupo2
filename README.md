@@ -1,10 +1,9 @@
 # vliw_grupo2 — Feistel4-VLIW (CE4301, Grupo 2)
 
 Procesador VLIW de 128 bits por bundle (4 slots de 32 bits: ALU, LSU, BRU y
-cripto/seguridad) con cifrado por bloques Feistel de 4 rondas en hardware,
-escrito en SystemVerilog, con ensamblador, cargador de archivos, simulación
-y pruebas. El compilador del lenguaje JAF (repo `P1_CE1108`) genera binarios
-para este procesador.
+cripto/seguridad) con cifrado Feistel4, jerarquía Harvard de datos (L1-D + L2
+inclusiva, write/eviction buffers, DRAM a 25 MHz) y toolchain de simulación.
+El compilador JAF (repo `P1_CE1108`) genera binarios para este procesador.
 
 ## Estructura
 
@@ -14,7 +13,7 @@ para este procesador.
 | `tb/` | Testbenches autoverificables por módulo y `tb_top` (procesador completo); `tb/waves/` guarda de GTKWave |
 | `tools/` | `vliwasm.py` (ensamblador), `bin2mem.py`, `load_file.py`, `extract_data.py`, `check_dump.py`, `feistel4_ref.c` (referencia en C), `demo.sh`, `crypto_file.sh` (cifra o descifra cualquier archivo en el RTL; lo usan `make enc`/`dec`/`crypto`), `gen_programs.py` (genera los programas con constantes de 32 bits y sus `.expect`), `traza.py` (anota la traza `+TRACE` con las etiquetas del `.lst`) |
 | `programs/` | Programas en ensamblador con su `.expect` (resultado esperado) |
-| `docs/` | `isa.md`, `microarchitecture.md`, `simulation.md`, `compiler-integration.md`, `evidencias/` |
+| `docs/` | ISA, microarquitectura, `cache-hierarchy.md`, `l2-coherencia.md`, `performance-analysis.md`, `evidencias/` |
 
 ## Dependencias
 
@@ -33,11 +32,14 @@ Con versiones anteriores:
 
 | Comando | Qué hace |
 |---|---|
-| `make test` | Pruebas unitarias, ensambla y ejecuta todos los programas, verifica contra `.expect` |
+| `make test` | Unitarios, programas, lockstep y `make l2` |
+| `make run PROG=programs/mixto.asm CFG=base` | Ejecuta un programa (`CFG=nocache\|l1\|base\|wt\|…`) |
+| `make bench-l2` | Patrones secuencial/stride/aleatorio × configs → `docs/evidencias/l2-patrones.csv` |
+| `make l2` | Testbench de L2 inclusiva con stubs |
+| `make progs CFG=nocache` | Regresión funcional en una configuración |
 | `make sim-verilator` | Simula con Verilator |
-| `make cmp-sims` | Comprueba que Icarus y Verilator dejan registros finales idénticos en todos los programas |
+| `make cmp-sims` | Icarus vs Verilator (registros finales) |
 | `make lint` | Lint con Verilator |
-| `make run PROG=programs/mixto.asm` | Ensambla y ejecuta un programa |
 | `make wave` | Abre `build/waves/run.vcd` en GTKWave |
 | `make demo-archivo` / `make demo-imagen` | Cifra y descifra un archivo de texto / una imagen BMP en el procesador y compara con la referencia en C |
 | `make enc` / `make dec` / `make crypto` | Cifra o descifra **cualquier** archivo en el RTL, con la llave que se pase. `OUT=` pone la extensión (p. ej. `OUT=foto.png`). `OPEN=1` abre el resultado |
