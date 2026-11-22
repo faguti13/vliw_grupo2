@@ -21,7 +21,7 @@ PYTHON   ?= python3
 BUILD    := build
 
 RTL := rtl/vliw_pkg.sv rtl/inst_rom.sv rtl/memory.sv rtl/regfile.sv rtl/alu.sv rtl/lsu.sv rtl/bru.sv \
-       rtl/key_vault.sv rtl/crypto_unit.sv rtl/dispatch.sv rtl/fetch.sv rtl/core.sv rtl/top.sv
+       rtl/key_vault.sv rtl/crypto_unit.sv rtl/dispatch.sv rtl/fetch.sv rtl/core.sv rtl/perf_counters.sv rtl/top.sv
 UNIT_TBS := tb_alu tb_regfile tb_lsu tb_bru tb_dispatch tb_key_vault tb_crypto_unit
 TIMEOUT ?= 2000000
 
@@ -80,8 +80,9 @@ $(BUILD)/tb_stall_lockstep.vvp: tb/tb_stall_lockstep.sv tb/hazard_monitor.sv $(R
 stall-test: $(BUILD)/tb_stall_lockstep.vvp $(addprefix $(BUILD)/,$(addsuffix .mem,$(PROGS)))
 	@set -e; for s in 1 7 42; do for p in $(PROGS); do \
 	  stores=""; if [ "$$p" = memoria ]; then stores=+STORES=2; fi; \
+	  perf=""; if [ "$$p" = alu_paralelo ]; then perf="+INSTR=15 +BRANCH_STALL=2"; fi; \
 	  $(VVP) -n $< +PROG=$(BUILD)/$$p.mem +REGS=$(BUILD)/$$p.st.regs +DUMP=$(BUILD)/$$p.st.dump \
-	      $$stores +SEED=$$s +STALLPCT=60 +STALLMAX=9 +FREEPCT=15 > $(BUILD)/$$p.st.log; \
+	      $$stores $$perf +SEED=$$s +STALLPCT=60 +STALLMAX=9 +FREEPCT=15 > $(BUILD)/$$p.st.log; \
 	  $(PYTHON) tools/check_dump.py --regs $(BUILD)/$$p.st.regs --dump $(BUILD)/$$p.st.dump \
 	      --expect programs/$$p.expect --name "$$p [lockstep semilla $$s]" --log $(BUILD)/$$p.st.log; \
 	done; done

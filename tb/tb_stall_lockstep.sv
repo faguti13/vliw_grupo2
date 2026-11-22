@@ -13,12 +13,19 @@ module tb_stall_lockstep;
   logic [127:0] imem_data;
   logic         imem_en, dmem_re, dmem_we, dmem_stall;
   logic         halted;
+  logic         ev_adv, ev_taken;
+  logic [2:0]   ev_instr;
+  logic [31:0]  p_cycles, p_bundles, p_instr, p_l1d_stall, p_branch_stall, p_stall_events;
   logic [31:0]  illegal_cnt, bundles_exec, cycles;
 
   core u_core (.clk(clk), .rst(rst), .imem_addr(imem_addr), .imem_en(imem_en), .imem_data(imem_data),
       .dmem_addr(dmem_addr), .dmem_re(dmem_re), .dmem_we(dmem_we), .dmem_wdata(dmem_wdata), .dmem_rdata(dmem_rdata),
       .dmem_stall(dmem_stall), .halted(halted), .illegal_cnt(illegal_cnt), .bundles_exec(bundles_exec),
-      .cycles(cycles));
+      .cycles(cycles), .ev_adv(ev_adv), .ev_taken(ev_taken), .ev_instr(ev_instr));
+  perf_counters u_perf (.clk(clk), .rst(rst), .halted(halted), .stall(dmem_stall),
+      .ev_adv(ev_adv), .ev_taken(ev_taken), .ev_instr(ev_instr),
+      .cycles_total(p_cycles), .bundles_exec(p_bundles), .instr_exec(p_instr),
+      .l1d_stall_cycles(p_l1d_stall), .branch_stall_cycles(p_branch_stall), .stall_events(p_stall_events));
   inst_rom u_rom (.clk(clk), .rst(rst), .en(imem_en), .addr(imem_addr), .data(imem_data));
 
   integer raw_count, waw_count;
@@ -37,6 +44,7 @@ module tb_stall_lockstep;
   assign dmem_rdata = {dmem[da], dmem[da + 1], dmem[da + 2], dmem[da + 3]};
 
   integer seed, stall_pct, stall_max, free_pct, left, injected, stalled_cycles;
+  integer active_cycles = 0, stall_episodes = 0;
   integer next_acc, next_free;   // largo sorteado para el proximo acceso / ciclo libre (0 = sin stall)
   logic   in_stall, access, start;
   // Un stall puede empezar en el mismo ciclo en que aparece el acceso (como un miss real);
@@ -54,7 +62,11 @@ module tb_stall_lockstep;
       if (access) injected <= injected + 1;
     end else if (left > 0) left <= left - 1;
     else in_stall <= 1'b0;
-    if (!rst && dmem_stall) stalled_cycles <= stalled_cycles + 1;
+    if (!rst && !halted) begin
+      active_cycles <= active_cycles + 1;
+      if (start) stall_episodes <= stall_episodes + 1;
+      if (dmem_stall) stalled_cycles <= stalled_cycles + 1;
+    end
   end
 
   integer stores = 0;
@@ -90,6 +102,7 @@ module tb_stall_lockstep;
 
   string prog, regs_f, dump_f;
   integer timeout, dlo, dhi, i, j, fd, h, r, addr, b, expected_stores;
+  integer expected_instr, expected_branch_stall;
 
   initial begin
     if (!$value$plusargs("SEED=%d", seed)) seed = 1;
@@ -122,6 +135,13 @@ module tb_stall_lockstep;
     #1 rst = 0;
     while (!halted && cycles < timeout) @(posedge clk);
     repeat (2) @(posedge clk);
+    if (p_cycles !== active_cycles || p_bundles !== bundles_exec ||
+        p_l1d_stall !== stalled_cycles || p_stall_events !== stall_episodes)
+      $fatal(1, "Contadores de ciclos, bundles o stalls incorrectos");
+    if ($value$plusargs("INSTR=%d", expected_instr) && p_instr !== expected_instr)
+      $fatal(1, "Instrucciones: %0d, esperadas: %0d", p_instr, expected_instr);
+    if ($value$plusargs("BRANCH_STALL=%d", expected_branch_stall) && p_branch_stall !== expected_branch_stall)
+      $fatal(1, "Ciclos de salto: %0d, esperados: %0d", p_branch_stall, expected_branch_stall);
     if ($value$plusargs("STORES=%d", expected_stores) && stores !== expected_stores)
       $fatal(1, "Escrituras aceptadas: %0d, esperadas: %0d", stores, expected_stores);
     if (!halted) $display("TIMEOUT tras %0d ciclos", cycles);

@@ -83,6 +83,9 @@ module tb_top;
     // Reporte final en consola
     $display("HALT cycles=%0d bundles=%0d illegal=%0d hazards_raw=%0d hazards_waw=%0d SR=%08h",
              cycles, bundles_exec, illegal_cnt, raw_count, waw_count, dut.u_core.sr);
+    $display("PERF cycles=%0d bundles=%0d instr=%0d stall_datos=%0d stall_saltos=%0d eventos_stall=%0d IPC=%0.3f",
+             dut.p_cycles, dut.p_bundles, dut.p_instr, dut.p_l1d_stall, dut.p_branch_stall, dut.p_stall_events,
+             dut.p_cycles == 0 ? 0.0 : real'(dut.p_instr) / real'(dut.p_cycles));
     
     // Si se pidió +REGS, guarda los registros en un archivo
     if ($value$plusargs("REGS=%s", regs_f)) begin

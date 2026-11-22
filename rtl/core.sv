@@ -19,7 +19,9 @@ module core #(parameter logic [31:0] CRED = 32'hCAFE1234) (
   output logic         halted,     // procesador detenido
   output logic [31:0]  illegal_cnt, // contador de instr ilegales
   output logic [31:0]  bundles_exec, // contador de bundles ejecutados
-  output logic [31:0]  cycles       // contador de ciclos
+  output logic [31:0]  cycles,      // contador de ciclos
+  output logic         ev_adv, ev_taken,
+  output logic [2:0]   ev_instr
 );
   // Etapa 1: IF
   logic [31:0] pc;
@@ -101,6 +103,10 @@ module core #(parameter logic [31:0] CRED = 32'hCAFE1234) (
   endgenerate
 
   assign ex_go = idex_valid && !dmem_stall;
+  assign ev_adv = ex_go;
+  assign ev_taken = ex_taken;
+  assign ev_instr = ex_go ? (3'(e0[6:3] != vliw_pkg::F_NOP) + 3'(e1[6:3] != vliw_pkg::F_NOP) +
+                             3'(e2[6:3] != vliw_pkg::F_NOP) + 3'(e3[6:3] != vliw_pkg::F_NOP)) : 3'd0;
 
   // ALU
   logic a_wen, a_ill; logic [4:0] a_rd; logic [31:0] a_y;
