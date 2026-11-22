@@ -1,0 +1,13 @@
+prog,cfg,cycles,bundles,illegal,hazards_raw,hazards_waw,speedup_vs_nocache,expect
+bench_secuencial,nocache,919,68,0,0,0,1.00,PASS
+bench_secuencial,l1,126,68,0,0,0,7.29,PASS
+bench_secuencial,base,132,68,0,0,0,6.96,PASS
+bench_stride,nocache,1031,74,0,0,0,1.00,PASS
+bench_stride,l1,462,74,0,0,0,2.23,PASS
+bench_stride,base,504,74,0,0,0,2.05,PASS
+bench_aleatorio,nocache,919,68,0,0,0,1.00,PASS
+bench_aleatorio,l1,291,68,0,0,0,3.16,PASS
+bench_aleatorio,base,315,68,0,0,0,2.92,PASS
+mixto,nocache,765,122,0,0,0,1.00,PASS
+mixto,l1,184,122,0,0,0,4.16,PASS
+mixto,base,190,122,0,0,0,4.03,PASS

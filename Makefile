@@ -4,6 +4,7 @@
 #   make sim TB=tb_alu       un solo testbench
 #   make test                resumen PASS/FAIL de toda la regresion
 #   make l2                  cache L2 sola, con stubs de L1, eviction y DRAM
+#   make bench-l2            patrones secuencial/stride/aleatorio x nocache/l1/base → CSV
 #   make lint                Verilator --lint-only -Wall
 #   make sim-verilator PROG=programs/mixto.asm   simulacion con Verilator
 #   make asm PROG=programs/x.asm                 ensambla a build/x.mem
@@ -32,7 +33,7 @@ TIMEOUT ?= 2000000
 PROGS := isa_completa alu_paralelo memoria saltos fround feistel_bloque boveda mixto \
          bench_secuencial bench_stride bench_aleatorio
 
-.PHONY: all sim test lint tbs sim-verilator asm run wave vectors clean demo demo-archivo demo-imagen demo-compilador enc dec crypto l2
+.PHONY: all sim test lint tbs sim-verilator asm run wave vectors clean demo demo-archivo demo-imagen demo-compilador enc dec crypto l2 bench-l2
 
 all: sim
 
@@ -144,6 +145,39 @@ $(BUILD)/tb_l2_coherence.vvp: tb/tb_l2_coherence.sv rtl/l2_cache.sv | $(BUILD)
 
 l2: $(BUILD)/tb_l2_coherence.vvp
 	$(VVP) -n $(BUILD)/tb_l2_coherence.vvp
+
+# Patrones de acceso (Iteracion 5): ciclos nocache / L1 / L1+L2 → docs/evidencias/l2-patrones.csv
+BENCH_L2_PROGS := bench_secuencial bench_stride bench_aleatorio mixto
+BENCH_L2_CFGS  := nocache l1 base
+bench-l2: tbs $(addprefix $(BUILD)/,$(addsuffix .mem,$(BENCH_L2_PROGS)))
+	@mkdir -p $(BUILD)/evidencia_l2 docs/evidencias
+	@echo 'prog,cfg,cycles,bundles,illegal,hazards_raw,hazards_waw,speedup_vs_nocache,expect' > docs/evidencias/l2-patrones.csv
+	@set -e; \
+	for prog in $(BENCH_L2_PROGS); do \
+	  cyc_nc=0; \
+	  for cfg in $(BENCH_L2_CFGS); do \
+	    if [ "$$cfg" = base ]; then tb=$(BUILD)/tb_top.vvp; else tb=$(BUILD)/tb_top_$$cfg.vvp; fi; \
+	    $(VVP) -n $$tb +PROG=$(BUILD)/$$prog.mem \
+	      +REGS=$(BUILD)/evidencia_l2/$${prog}_$${cfg}.regs \
+	      +DUMP=$(BUILD)/evidencia_l2/$${prog}_$${cfg}.dump \
+	      +DUMPLO=65536 +DUMPHI=69631 +TIMEOUT=$(TIMEOUT) \
+	      > $(BUILD)/evidencia_l2/$${prog}_$${cfg}.log; \
+	    $(PYTHON) tools/check_dump.py --regs $(BUILD)/evidencia_l2/$${prog}_$${cfg}.regs \
+	      --dump $(BUILD)/evidencia_l2/$${prog}_$${cfg}.dump \
+	      --expect programs/$$prog.expect --name "$$prog [$$cfg]" \
+	      --log $(BUILD)/evidencia_l2/$${prog}_$${cfg}.log; \
+	    line=$$(grep '^HALT' $(BUILD)/evidencia_l2/$${prog}_$${cfg}.log); \
+	    cyc=$$(echo "$$line" | sed -n 's/.*cycles=\([0-9]*\).*/\1/p'); \
+	    bun=$$(echo "$$line" | sed -n 's/.*bundles=\([0-9]*\).*/\1/p'); \
+	    ill=$$(echo "$$line" | sed -n 's/.*illegal=\([0-9]*\).*/\1/p'); \
+	    raw=$$(echo "$$line" | sed -n 's/.*hazards_raw=\([0-9]*\).*/\1/p'); \
+	    waw=$$(echo "$$line" | sed -n 's/.*hazards_waw=\([0-9]*\).*/\1/p'); \
+	    if [ "$$cfg" = nocache ]; then cyc_nc=$$cyc; sp=1.00; \
+	    else sp=$$($(PYTHON) -c "print(f'{int('$$cyc_nc')/int('$$cyc'):.2f}')"); fi; \
+	    echo "$$prog,$$cfg,$$cyc,$$bun,$$ill,$$raw,$$waw,$$sp,PASS" >> docs/evidencias/l2-patrones.csv; \
+	  done; \
+	done
+	@echo "CSV → docs/evidencias/l2-patrones.csv"
 
 # ---- Ensamblar / ejecutar un programa ----
 asm: $(BUILD)
