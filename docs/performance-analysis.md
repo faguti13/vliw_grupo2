@@ -2,7 +2,7 @@
 
 Metodología y resultados medidos en la rama de integración (`feat/integracion-p2`)
 sobre el procesador Harvard con L1-D, L2 inclusiva, write/eviction buffers y DRAM
-a 25 MHz (\(T_{mem} = 53\) ciclos de CPU). Los datos brutos están en
+a 25 MHz (Tmem = 53 ciclos de CPU). Los datos brutos están en
 `docs/evidencias/l2-patrones.csv` (regenerar con `make bench-l2`).
 
 ## 1. Metodología
@@ -24,22 +24,17 @@ make run PROG=programs/bench_secuencial.asm CFG=base
 
 ### 1.2 Fórmulas (enunciado)
 
-\[
-\mathrm{IPC} = \frac{\text{instrucciones no-NOP}}{\text{ciclos totales}}
-\]
+IPC = (instrucciones no-NOP) / (ciclos totales)
 
-Con \(T_{L1}=1\), \(T_{L2}=8\), \(T_{mem}=53\) (\(f_{mem}=25\,\mathrm{MHz}\)):
+Con TL1 = 1, TL2 = 8, Tmem = 53 (fmem = 25 MHz):
 
-\[
-\mathrm{AMAT} = 1 + \mathrm{MR}_{L1}\,(8 + \mathrm{MR}_{L2}\cdot 53)
-\quad\text{(base)}
-\]
+AMAT = 1 + MR_L1 · (8 + MR_L2 · 53)  (configuración base)
 
 | Config | Costo efectivo de un acceso que falla en L1 |
 |---|---|
-| `nocache` | cada `CP`/`AP` paga \(T_{mem}=53\) |
-| `l1` | miss → fill desde DRAM (\(3 + T_{mem}\) aprox.) |
-| `base` | miss L1 → hit L2 (8) o miss L2 (\(8+T_{mem}\)) |
+| `nocache` | cada `CP`/`AP` paga Tmem = 53 |
+| `l1` | miss → fill desde DRAM (3 + Tmem aprox.) |
+| `base` | miss L1 → hit L2 (8) o miss L2 (8 + Tmem) |
 
 ## 2. Resultados medidos
 
@@ -56,7 +51,7 @@ de ALU. Riesgos RAW/WAW del monitor: **0** en todas las corridas.
 
 ### 2.1 Lectura
 
-- **nocache → L1.** El salto dominante: deja de pagarse \(T_{mem}\) en cada acceso
+- **nocache → L1.** El salto dominante: deja de pagarse Tmem en cada acceso
   con localidad. En secuencial (una línea, 1 miss + 7 hits) L1 basta (~7×).
 - **L1 → base (L1+L2).** En estos programas chicos el working set cabe en L1; L2
   casi no acelera y a veces suma unos ciclos (snoop / fill inclusivo). Eso es
@@ -73,7 +68,7 @@ de ALU. Riesgos RAW/WAW del monitor: **0** en todas las corridas.
 | L1 reemplazo | LRU 1 bit | `rtl/l1d_cache.sv` |
 | L2 | WB, Tree-PLRU, inclusiva, hit 8 | `rtl/l2_cache.sv` |
 | RAW en buffers | store-to-load forwarding | `BUFFER_FWD=1`, write/eviction buffer |
-| \(f_{mem}\) | 25 MHz → \(T_{mem}=53\) | `MEM_CLK_DIV=4`, `rtl/dram_ctrl.sv` |
+| fmem | 25 MHz → Tmem = 53 | `MEM_CLK_DIV=4`, `rtl/dram_ctrl.sv` |
 
 Comparar `CFG=wt` (L1 write-through) es opcional: `make run PROG=... CFG=wt`.
 
