@@ -3,10 +3,12 @@
 #   make sim                 regresion completa en Icarus Verilog (unitarios + programas)
 #   make sim TB=tb_alu       un solo testbench
 #   make test                resumen PASS/FAIL de toda la regresion
+#   make l2                  cache L2 sola, con stubs de L1, eviction y DRAM
+#   make bench-l2            patrones secuencial/stride/aleatorio x nocache/l1/base → CSV
 #   make lint                Verilator --lint-only -Wall
 #   make sim-verilator PROG=programs/mixto.asm   simulacion con Verilator
 #   make asm PROG=programs/x.asm                 ensambla a build/x.mem
-#   make run PROG=programs/x.asm | BIN=archivo.bin   corre un programa
+#   make run PROG=programs/x.asm CFG=nocache|base|l1|wt   corre un programa
 #   make enc IN=archivo KEY=32hex [OUT=salida.bin]   cifra un archivo en el RTL
 #   make dec IN=archivo KEY=32hex [OUT=foto.png]     descifra; la extension la pone OUT
 #   make crypto IN=foto.png KEY=32hex [OUT=foto.png] cifra, descifra y compara
@@ -20,15 +22,18 @@ VERILATOR?= verilator
 PYTHON   ?= python3
 BUILD    := build
 
-RTL := rtl/vliw_pkg.sv rtl/memory.sv rtl/regfile.sv rtl/alu.sv rtl/lsu.sv rtl/bru.sv \
-       rtl/key_vault.sv rtl/crypto_unit.sv rtl/dispatch.sv rtl/fetch.sv rtl/core.sv rtl/top.sv
+RTL := rtl/vliw_pkg.sv rtl/regfile.sv rtl/alu.sv rtl/lsu.sv rtl/bru.sv \
+       rtl/key_vault.sv rtl/crypto_unit.sv rtl/dispatch.sv rtl/fetch.sv rtl/core.sv \
+       rtl/inst_rom.sv rtl/clk_div.sv rtl/dram_ctrl.sv rtl/eviction_buffer.sv rtl/write_buffer.sv \
+       rtl/l1d_cache.sv rtl/l2_cache.sv rtl/mem_subsystem.sv rtl/perf_counters.sv rtl/top.sv
 UNIT_TBS := tb_alu tb_regfile tb_lsu tb_bru tb_dispatch tb_key_vault tb_crypto_unit
 TIMEOUT ?= 2000000
 
 # Programas de regresion: cada uno tiene programs/<n>.asm y programs/<n>.expect
-PROGS := isa_completa alu_paralelo memoria saltos fround feistel_bloque boveda mixto
+PROGS := isa_completa alu_paralelo memoria saltos fround feistel_bloque boveda mixto \
+         bench_secuencial bench_stride bench_aleatorio
 
-.PHONY: all sim test lint sim-verilator asm run wave vectors clean demo demo-archivo demo-imagen demo-compilador enc dec crypto
+.PHONY: all sim test lint tbs sim-verilator asm run wave vectors clean demo demo-archivo demo-imagen demo-compilador enc dec crypto l2 bench-l2
 
 all: sim
 
@@ -45,8 +50,35 @@ $(BUILD)/vectors.hex: $(BUILD)/feistel4_ref
 	$(BUILD)/feistel4_ref vectors 16 00112233445566778899aabbccddeeff > $@
 
 # ---- Testbenches unitarios ----
+.PHONY: dram-test
+$(BUILD)/tb_dram_ctrl_d%.vvp: tb/tb_dram_ctrl.sv rtl/clk_div.sv rtl/dram_ctrl.sv | $(BUILD)
+	$(IVERILOG) -g2012 -Wall -s tb_dram_ctrl -Ptb_dram_ctrl.DIV=$* -o $@ $^
+
+dram-test: $(addprefix $(BUILD)/tb_dram_ctrl_d,$(addsuffix .vvp,2 4 5))
+	@set -e; for t in $^; do $(VVP) -n $$t; done
+
+.PHONY: eviction-test
+$(BUILD)/tb_eviction_buffer.vvp: tb/tb_eviction_buffer.sv rtl/eviction_buffer.sv | $(BUILD)
+	$(IVERILOG) -g2012 -Wall -s tb_eviction_buffer -o $@ $^
+
+eviction-test: $(BUILD)/tb_eviction_buffer.vvp
+	$(VVP) -n $<
+
+.PHONY: l1d-test buffers-test
+$(BUILD)/tb_l1d.vvp: tb/tb_l1d.sv rtl/l1d_cache.sv rtl/write_buffer.sv | $(BUILD)
+	$(IVERILOG) -g2012 -Wall -Wno-sensitivity-entire-array -o $@ $^
+
+$(BUILD)/tb_buffers.vvp: tb/tb_buffers.sv rtl/write_buffer.sv rtl/eviction_buffer.sv | $(BUILD)
+	$(IVERILOG) -g2012 -Wall -o $@ $^
+
+l1d-test: $(BUILD)/tb_l1d.vvp
+	$(VVP) -n $<
+
+buffers-test: $(BUILD)/tb_buffers.vvp
+	$(VVP) -n $<
+
 $(BUILD)/%.vvp: tb/%.sv $(RTL) | $(BUILD)
-	$(IVERILOG) -g2012 -Wall -o $@ $(RTL) $<
+	$(IVERILOG) -g2012 -Wall -Wno-sensitivity-entire-array -o $@ $(RTL) $<
 
 ifdef TB
 sim: $(BUILD)/$(TB).vvp $(BUILD)/vectors.hex
@@ -55,37 +87,110 @@ else
 sim: unit progs
 endif
 
-unit: $(BUILD)/vectors.hex $(addprefix $(BUILD)/,$(addsuffix .vvp,$(UNIT_TBS)))
+unit: $(BUILD)/vectors.hex $(addprefix $(BUILD)/,$(addsuffix .vvp,$(UNIT_TBS))) dram-test eviction-test l1d-test buffers-test
 	@set -e; for t in $(UNIT_TBS); do $(VVP) -n $(BUILD)/$$t.vvp | grep -E "PASS|FAIL"; done
 
 # ---- Testbench de sistema (tb_top) ----
+# CFG: ideal | nocache | l1 | base (L1+L2 WB) | wt | nofwd | div2 | div5
+CFG ?= base
+CFGS := ideal nocache l1 base wt nofwd div2 div5
+P_ideal   := -Ptb_top.MODE=0
+P_nocache := -Ptb_top.MODE=1
+P_l1      := -Ptb_top.MODE=2
+P_base    :=
+P_wt      := -Ptb_top.L1_WT=1
+P_nofwd   := -Ptb_top.BUFFER_FWD=0
+P_div2    := -Ptb_top.MEM_CLK_DIV=2
+P_div5    := -Ptb_top.MEM_CLK_DIV=5
+TBTOP := $(if $(filter base,$(CFG)),$(BUILD)/tb_top.vvp,$(BUILD)/tb_top_$(CFG).vvp)
+
 $(BUILD)/tb_top.vvp: tb/tb_top.sv tb/hazard_monitor.sv $(RTL) | $(BUILD)
-	$(IVERILOG) -g2012 -Wall -o $@ $(RTL) tb/hazard_monitor.sv tb/tb_top.sv
+	$(IVERILOG) -g2012 -Wall -Wno-sensitivity-entire-array -o $@ $(RTL) tb/hazard_monitor.sv tb/tb_top.sv
+
+$(BUILD)/tb_top_%.vvp: tb/tb_top.sv tb/hazard_monitor.sv $(RTL) | $(BUILD)
+	$(IVERILOG) -g2012 -Wall -Wno-sensitivity-entire-array $(P_$*) -o $@ $(RTL) tb/hazard_monitor.sv tb/tb_top.sv
+
+tbs: $(BUILD)/tb_top.vvp $(addprefix $(BUILD)/tb_top_,$(addsuffix .vvp,$(filter-out base,$(CFGS))))
 
 $(BUILD)/%.mem: programs/%.asm tools/vliwasm.py | $(BUILD)
 	$(PYTHON) tools/vliwasm.py --check-hazards -o $(BUILD)/$*.mem --bin $(BUILD)/$*.bin --lst $(BUILD)/$*.lst $<
 
-progs: $(BUILD)/tb_top.vvp $(addprefix $(BUILD)/,$(addsuffix .mem,$(PROGS))) $(BUILD)/feistel4_ref
+progs: $(TBTOP) $(addprefix $(BUILD)/,$(addsuffix .mem,$(PROGS))) $(BUILD)/feistel4_ref
 	@set -e; for p in $(PROGS); do \
-	  $(VVP) -n $(BUILD)/tb_top.vvp +PROG=$(BUILD)/$$p.mem +REGS=$(BUILD)/$$p.regs +DUMP=$(BUILD)/$$p.dump \
+	  $(VVP) -n $(TBTOP) +PROG=$(BUILD)/$$p.mem +REGS=$(BUILD)/$$p.regs +DUMP=$(BUILD)/$$p.dump \
 	      +DUMPLO=65536 +DUMPHI=69631 +TIMEOUT=$(TIMEOUT) > $(BUILD)/$$p.log; \
 	  $(PYTHON) tools/check_dump.py --regs $(BUILD)/$$p.regs --dump $(BUILD)/$$p.dump \
-	      --expect programs/$$p.expect --name $$p --log $(BUILD)/$$p.log; \
+	      --expect programs/$$p.expect --name "$$p [$(CFG)]" --log $(BUILD)/$$p.log; \
 	done
 
-test: sim
+.PHONY: stall-test
+$(BUILD)/tb_stall_lockstep.vvp: tb/tb_stall_lockstep.sv tb/hazard_monitor.sv $(RTL) | $(BUILD)
+	$(IVERILOG) -g2012 -Wall -Wno-sensitivity-entire-array -s tb_stall_lockstep -o $@ $(RTL) tb/hazard_monitor.sv $<
+
+stall-test: $(BUILD)/tb_stall_lockstep.vvp $(addprefix $(BUILD)/,$(addsuffix .mem,$(PROGS)))
+	@set -e; for s in 1 7 42; do for p in $(PROGS); do \
+	  stores=""; if [ "$$p" = memoria ]; then stores=+STORES=2; fi; \
+	  perf=""; if [ "$$p" = alu_paralelo ]; then perf="+INSTR=15 +BRANCH_STALL=2"; fi; \
+	  $(VVP) -n $< +PROG=$(BUILD)/$$p.mem +REGS=$(BUILD)/$$p.st.regs +DUMP=$(BUILD)/$$p.st.dump \
+	      $$stores $$perf +SEED=$$s +STALLPCT=60 +STALLMAX=9 +FREEPCT=15 > $(BUILD)/$$p.st.log; \
+	  $(PYTHON) tools/check_dump.py --regs $(BUILD)/$$p.st.regs --dump $(BUILD)/$$p.st.dump \
+	      --expect programs/$$p.expect --name "$$p [lockstep semilla $$s]" --log $(BUILD)/$$p.st.log; \
+	done; done
+
+test: sim stall-test l2
+
+# L2 inclusiva aislada (stubs de L1/EB/DRAM).
+$(BUILD)/tb_l2_coherence.vvp: tb/tb_l2_coherence.sv rtl/l2_cache.sv | $(BUILD)
+	$(IVERILOG) -g2012 -Wall -Wno-sensitivity-entire-array -o $@ rtl/l2_cache.sv tb/tb_l2_coherence.sv
+
+l2: $(BUILD)/tb_l2_coherence.vvp
+	$(VVP) -n $(BUILD)/tb_l2_coherence.vvp
+
+# Patrones de acceso (Iteracion 5): ciclos nocache / L1 / L1+L2 → docs/evidencias/l2-patrones.csv
+BENCH_L2_PROGS := bench_secuencial bench_stride bench_aleatorio mixto
+BENCH_L2_CFGS  := nocache l1 base
+bench-l2: tbs $(addprefix $(BUILD)/,$(addsuffix .mem,$(BENCH_L2_PROGS)))
+	@mkdir -p $(BUILD)/evidencia_l2 docs/evidencias
+	@echo 'prog,cfg,cycles,bundles,illegal,hazards_raw,hazards_waw,speedup_vs_nocache,expect' > docs/evidencias/l2-patrones.csv
+	@set -e; \
+	for prog in $(BENCH_L2_PROGS); do \
+	  cyc_nc=0; \
+	  for cfg in $(BENCH_L2_CFGS); do \
+	    if [ "$$cfg" = base ]; then tb=$(BUILD)/tb_top.vvp; else tb=$(BUILD)/tb_top_$$cfg.vvp; fi; \
+	    $(VVP) -n $$tb +PROG=$(BUILD)/$$prog.mem \
+	      +REGS=$(BUILD)/evidencia_l2/$${prog}_$${cfg}.regs \
+	      +DUMP=$(BUILD)/evidencia_l2/$${prog}_$${cfg}.dump \
+	      +DUMPLO=65536 +DUMPHI=69631 +TIMEOUT=$(TIMEOUT) \
+	      > $(BUILD)/evidencia_l2/$${prog}_$${cfg}.log; \
+	    $(PYTHON) tools/check_dump.py --regs $(BUILD)/evidencia_l2/$${prog}_$${cfg}.regs \
+	      --dump $(BUILD)/evidencia_l2/$${prog}_$${cfg}.dump \
+	      --expect programs/$$prog.expect --name "$$prog [$$cfg]" \
+	      --log $(BUILD)/evidencia_l2/$${prog}_$${cfg}.log; \
+	    line=$$(grep '^HALT' $(BUILD)/evidencia_l2/$${prog}_$${cfg}.log); \
+	    cyc=$$(echo "$$line" | sed -n 's/.*cycles=\([0-9]*\).*/\1/p'); \
+	    bun=$$(echo "$$line" | sed -n 's/.*bundles=\([0-9]*\).*/\1/p'); \
+	    ill=$$(echo "$$line" | sed -n 's/.*illegal=\([0-9]*\).*/\1/p'); \
+	    raw=$$(echo "$$line" | sed -n 's/.*hazards_raw=\([0-9]*\).*/\1/p'); \
+	    waw=$$(echo "$$line" | sed -n 's/.*hazards_waw=\([0-9]*\).*/\1/p'); \
+	    if [ "$$cfg" = nocache ]; then cyc_nc=$$cyc; sp=1.00; \
+	    else sp=$$($(PYTHON) -c "print(f'{int('$$cyc_nc')/int('$$cyc'):.2f}')"); fi; \
+	    echo "$$prog,$$cfg,$$cyc,$$bun,$$ill,$$raw,$$waw,$$sp,PASS" >> docs/evidencias/l2-patrones.csv; \
+	  done; \
+	done
+	@echo "CSV → docs/evidencias/l2-patrones.csv"
 
 # ---- Ensamblar / ejecutar un programa ----
 asm: $(BUILD)
 	$(PYTHON) tools/vliwasm.py --check-hazards -o $(BUILD)/$(basename $(notdir $(PROG))).mem \
 	    --bin $(BUILD)/$(basename $(notdir $(PROG))).bin --lst $(BUILD)/$(basename $(notdir $(PROG))).lst $(PROG)
 
-run: $(BUILD)/tb_top.vvp
+run: $(TBTOP)
 	@set -e; \
 	if [ -n "$(BIN)" ]; then $(PYTHON) tools/bin2mem.py $(BIN) $(BUILD)/run.mem; M=$(BUILD)/run.mem; \
 	else $(MAKE) -s asm PROG=$(PROG); M=$(BUILD)/$(basename $(notdir $(PROG))).mem; fi; \
-	$(VVP) -n $(BUILD)/tb_top.vvp +PROG=$$M $(if $(DATA),+DATA=$(DATA),) +REGS=$(BUILD)/run.regs \
-	    +DUMP=$(BUILD)/memory_dump.txt +DUMPLO=$${DUMPLO:-65536} +DUMPHI=$${DUMPHI:-1048575} +VCD=$(BUILD)/waves/run.vcd \
+	mkdir -p $(BUILD)/waves; \
+	$(VVP) -n $(TBTOP) +PROG=$$M $(if $(DATA),+DATA=$(DATA),) +REGS=$(BUILD)/run.regs \
+	    +DUMP=$(BUILD)/memory_dump.txt +DUMPLO=$${DUMPLO:-65536} +DUMPHI=$${DUMPHI:-69631} +VCD=$(BUILD)/waves/run.vcd \
 	    $(if $(TRACE),+TRACE,) +TIMEOUT=$(TIMEOUT)
 
 # ---- Ondas ----
@@ -112,7 +217,7 @@ sim-verilator: $(BUILD)/vl/Vtb_top
 KEY     ?= 00112233445566778899aabbccddeeff
 IN      ?=
 OUT     ?=
-ADDR    ?= 0x20000
+ADDR    ?= 0x4000
 SIZE    ?=
 OPEN    ?= 0
 
